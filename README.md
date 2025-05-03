@@ -1,6 +1,7 @@
 # Distributed_Systems_Project
 
 ### 1. Exercise - Alibaba Clusterdata (until 13th May)
+#### The data recides in our home directory of our server and should be used from there
 - on alibaba clusterdata
 	- download 1 hour first for overview
 	- https://github.com/alibaba/clusterdata/tree/master/cluster-trace-microservices-v2022
