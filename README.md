@@ -1,7 +1,7 @@
 # Distributed_Systems_Project
 
 ### 1. Exercise - Alibaba Clusterdata (until 13th May)
-#### The data recides in the home directory of our server and should be used from there. Create a sylink like this:
+#### The data recides in the home directory of our server and should be used from there. Create a symlink like this:
 ```console
 ln -s /home/project/data/clusterdata/cluster-trace-microservices-v2022/data /home/{your_user}/Distributed_Systems_Project/
 ```
