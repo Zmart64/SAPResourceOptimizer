@@ -20,3 +20,18 @@ ln -s /home/project/data /home/{your_user}/Distributed_Systems_Project/
 - based on classification (anwendungen, micro services), predict ressources 
 		- cpu, ram, latency
 - github
+
+## Meeting with Joel
+- sehr frei in Aufgabenstellung, e.g.:
+	- Auslastung der Nodes insgesamt
+		- Auslastung einzelner Nodes
+	- ein globales Modell wahrscheinlich nicht möglich, aber man kann es versuchen
+	- Latenz
+	- pro Microservice
+	- Microservices in sinnvolle Klassen einteilen
+	- Vorhersage für nächsten 60 sek als Minimum
+		- Vorhersagehorizont vergrößern und Accuracy prüfen
+- zuerst: Node prediction
+	- weil kleinerer Datensatz
+	- Anmerkung: MSResource
+- Latenz nur als erste Idee
