@@ -20,7 +20,7 @@ ln -s /home/project/data /home/{your_user}/Distributed_Systems_Project/
 - based on classification (anwendungen, micro services), predict ressources 
 		- cpu, ram, latency
 - github
-
+---
 ## Meeting with Joel
 - sehr frei in Aufgabenstellung, e.g.:
 	- Auslastung der Nodes insgesamt
