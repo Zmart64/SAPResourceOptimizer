@@ -35,3 +35,7 @@ ln -s /home/project/data /home/{your_user}/Distributed_Systems_Project/
 	- weil kleinerer Datensatz
 	- Anmerkung: MSResource
 - Latenz nur als erste Idee
+### Recap
+- **first goal**: Prediction of CPU utilization for ?
+- everyone is doing some research to find out what's useful
+	- especially for what we want to predict (individual, clustered microservices) 
