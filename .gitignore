@@ -1,5 +1,5 @@
 .DS_Store
 /data
-
-venv
-.venv
+/eda/output
+/output
+__pycache__/
