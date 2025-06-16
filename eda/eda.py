@@ -892,9 +892,10 @@ plt.close()
 
 print("\n=== FEATURE IMPORTANCE RANKING ===")
 print("Features ranked by correlation strength with memory usage:")
-IMPORTANCE = "High" if abs(corr) > 0.3 else "Medium" if abs(corr) > 0.1 else "Low"
+
 for i, (feature, corr) in enumerate(target_correlations.items(), 1):
     feature_name = feature.replace("_encoded", "")
+    IMPORTANCE = "High" if abs(corr) > 0.3 else "Medium" if abs(corr) > 0.1 else "Low"
     print(f"{i:2d}. {feature_name:15s}: {corr:6.3f} ({IMPORTANCE})")
 
 
