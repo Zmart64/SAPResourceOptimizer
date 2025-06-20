@@ -2,6 +2,8 @@
 Data Preprocessing
 """
 
+import time
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
@@ -15,14 +17,14 @@ class DataPreprocessor:
     def __init__(self):
         self.label_encoders = {}
 
-    def load_data(self, file_path):
+    def load_data(self, file_path) -> pd.DataFrame:
         """Load the build data CSV file"""
         print(f"Loading data from: {file_path}")
         df = pd.read_csv(file_path, delimiter=";")
         print(f"Dataset shape: {df.shape}")
         return df
 
-    def convert_memory_units(self, df: pd.DataFrame):
+    def convert_memory_units(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert memory values from bytes to MB for better interpretability"""
         df["max_rss_mb"] = df["max_rss"] / (1024 * 1024)
         df["max_cache_mb"] = df["max_cache"] / (1024 * 1024)
@@ -30,7 +32,7 @@ class DataPreprocessor:
         df["memreq_mb"] = df["memreq"]
         return df
 
-    def filter_successful_builds(self, df: pd.DataFrame):
+    def filter_successful_builds(self, df: pd.DataFrame) -> pd.DataFrame:
         """Filter to only successful builds (ts_status == 'ok')"""
         print(f"Original dataset rows: {len(df)}")
         print(f"\nStatus distribution:\n{df['ts_status'].value_counts()}")
@@ -46,14 +48,14 @@ class DataPreprocessor:
 
         return df_clean
 
-    def process_datetime(self, df: pd.DataFrame):
+    def process_datetime(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert time column to datetime and extract time-based features"""
         df["time"] = pd.to_datetime(df["time"], format="mixed")
         df["hour"] = df["time"].dt.hour
         df["day_of_week"] = df["time"].dt.dayofweek
         return df
 
-    def extract_build_profile_features(self, df: pd.DataFrame):
+    def extract_build_profile_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Extract features from buildProfile column"""
         df["architecture"] = df["buildProfile"].str.extract(r"(linux\w+)")
         df["compiler"] = df["buildProfile"].str.extract(r"-(gcc\d*|clang\w*)")
@@ -67,7 +69,7 @@ class DataPreprocessor:
 
         return df
 
-    def process_targets_feature(self, df: pd.DataFrame):
+    def process_targets_feature(self, df: pd.DataFrame) -> pd.DataFrame:
         """Process targets column to extract meaningful features"""
         # Create binary features for common target types
         df["has_all_target"] = df["targets"].str.contains("all", na=False).astype(int)
@@ -80,7 +82,7 @@ class DataPreprocessor:
 
         return df
 
-    def create_derived_features(self, df: pd.DataFrame):
+    def create_derived_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create prev_avg derived feature"""
         df = df.sort_values("time").reset_index(drop=True)
 
@@ -116,7 +118,9 @@ class DataPreprocessor:
 
         return df
 
-    def encode_categorical_features(self, df: pd.DataFrame, categorical_features):
+    def encode_categorical_features(
+        self, df: pd.DataFrame, categorical_features
+    ) -> pd.DataFrame:
         """Label encode categorical features"""
         for col in categorical_features:
             le = LabelEncoder()
@@ -124,7 +128,9 @@ class DataPreprocessor:
             self.label_encoders[col] = le
         return df
 
-    def prepare_features(self, df: pd.DataFrame):
+    def prepare_features(
+        self, df: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.Series, list]:
         """Prepare final feature matrix for machine learning"""
         # Define feature columns
         feature_columns = [
@@ -185,7 +191,10 @@ class DataPreprocessor:
         # df = self.process_targets_feature(df)
 
         # Create derived features
+        start_time = time.time()
         df = self.create_derived_features(df)
+        end_time = time.time()
+        print(f"create_derived_features took {end_time - start_time:.2f} seconds")
 
         # Prepare features
         x, y, feature_columns = self.prepare_features(df)

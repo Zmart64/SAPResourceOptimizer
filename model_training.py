@@ -10,7 +10,8 @@ import pandas as pd
 import xgboost as xgb
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
+
+from config import Config
 
 
 class ModelTrainer:
@@ -23,55 +24,63 @@ class ModelTrainer:
         self.results = {}
 
     def split_data(
-        self, x: pd.DataFrame, y: pd.Series, test_size: float, random_state: int
+        self, x: pd.DataFrame, y: pd.Series, test_size: float
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """Split data into training and testing sets"""
-        x_train, x_test, y_train, y_test = train_test_split(
-            x, y, test_size=test_size, random_state=random_state
-        )
+        """Split data into training and testing sets (time-aware split)"""
+        # Calculate split index based on test_size
+        split_index = int(len(x) * (1 - test_size))
+
+        # Split chronologically
+        x_train = x.iloc[:split_index]
+        x_test = x.iloc[split_index:]
+        y_train = y.iloc[:split_index]
+        y_test = y.iloc[split_index:]
+
         print(f"Training set: {x_train.shape}")
         print(f"Test set: {x_test.shape}")
         return x_train, x_test, y_train, y_test
 
-    def train_random_forest(self, x_train, y_train, **kwargs):
+    def train_random_forest(self, x_train, y_train):
         """Train Random Forest model"""
         print("\nTraining Random Forest...")
-
-        # Default parameters (can be overridden)
-        params = {
-            "n_estimators": 100,
-            "max_depth": 10,
-            "random_state": 42,
-            "n_jobs": -1,
-        }
-        params.update(kwargs)
-
-        self.rf_model = RandomForestRegressor(**params)
+        self.rf_model = RandomForestRegressor(**Config.RANDOM_FOREST_PARAMS.copy())
         self.rf_model.fit(x_train, y_train)
 
         print("Random Forest training complete!")
         return self.rf_model
 
-    def train_xgboost(self, x_train, y_train, **kwargs):
+    def train_xgboost(self, x_train, y_train):
         """Train XGBoost model"""
 
         print("\nTraining XGBoost...")
-
-        # Default parameters (can be overridden)
-        params = {
-            "n_estimators": 100,
-            "max_depth": 6,
-            "learning_rate": 0.1,
-            "random_state": 42,
-            "n_jobs": -1,
-        }
-        params.update(kwargs)
-
-        self.xgb_model = xgb.XGBRegressor(**params)
+        self.xgb_model = xgb.XGBRegressor(**Config.XGBOOST_PARAMS.copy())
         self.xgb_model.fit(x_train, y_train)
 
         print("XGBoost training complete!")
         return self.xgb_model
+
+    # def train_xgboost(self, x_train, y_train, **kwargs):
+    #     """Train XGBoost model with quantile regression for overestimation"""
+
+    #     print("\nTraining XGBoost with quantile regression...")
+
+    #     # Default parameters with quantile objective
+    #     params = {
+    #         "n_estimators": 100,
+    #         "max_depth": 6,
+    #         "learning_rate": 0.1,
+    #         "random_state": 42,
+    #         "n_jobs": -1,
+    #         "objective": "reg:quantileerror",
+    #         "quantile_alpha": 0.8,  # Predict 80th percentile (adjust 0.7-0.9)
+    #     }
+    #     params.update(kwargs)
+
+    #     self.xgb_model = xgb.XGBRegressor(**params)
+    #     self.xgb_model.fit(x_train, y_train)
+
+    #     print("XGBoost quantile training complete!")
+    #     return self.xgb_model
 
     def evaluate_model(self, model, x_test, y_test, model_name):
         """Evaluate model performance"""
@@ -114,7 +123,7 @@ class ModelTrainer:
             print(f"Model {model_name} does not support feature importance")
             return None
 
-    def train_all_models(self, x, y, feature_columns, test_size, random_state):
+    def train_all_models(self, x, y, feature_columns, test_size):
         """Train all available models and evaluate them"""
         print("=== Training All Models ===")
 
@@ -130,9 +139,7 @@ class ModelTrainer:
         self.feature_columns = feature_columns
 
         # Split data into training and testing sets
-        x_train, x_test, y_train, y_test = self.split_data(
-            x, y, test_size=test_size, random_state=random_state
-        )
+        x_train, x_test, y_train, y_test = self.split_data(x, y, test_size=test_size)
 
         # Train Random Forest
         rf_model = self.train_random_forest(x_train, y_train)
@@ -144,8 +151,7 @@ class ModelTrainer:
         self.results["random_forest"] = rf_results
         self.results["random_forest"]["importance"] = rf_importance
 
-        # Train XGBoost if available
-
+        # Train XGBoost
         xgb_model = self.train_xgboost(x_train, y_train)
         xgb_results = self.evaluate_model(xgb_model, x_test, y_test, "XGBoost")
         xgb_importance = self.get_feature_importance(

@@ -23,17 +23,37 @@ class Config:
     RANDOM_STATE = 42
     PRE_AVG_N = 3
 
+    AVAILABLE_FEATURES = [
+        "atom_id",
+        "time",
+        "location",
+        "memory_fail_count",
+        "branch",
+        "buildProfile",
+        "jobs",
+        "localJobs",
+        "makeType",
+        "targets",
+        "component",
+        "ts_phase",
+        "ts_status",
+        "cgroup",
+        "max_rss",
+        "max_cache",
+        "memreq",
+    ]
+
     SIMILARITY_FEATURES = [
         "component",
-        "compiler",
-        "optimization",
+        "buildProfile",
         "jobs",
     ]
+
     # Model parameters
     RANDOM_FOREST_PARAMS = {
         "n_estimators": 100,
         "max_depth": 10,
-        "random_state": 42,
+        "random_state": RANDOM_STATE,
         "n_jobs": -1,
     }
 
@@ -41,7 +61,7 @@ class Config:
         "n_estimators": 100,
         "max_depth": 6,
         "learning_rate": 0.1,
-        "random_state": 42,
+        "random_state": RANDOM_STATE,
         "n_jobs": -1,
     }
 

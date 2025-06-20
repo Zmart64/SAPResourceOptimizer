@@ -121,7 +121,6 @@ def main():
             y,
             feature_columns,
             test_size=Config.TEST_SIZE,
-            random_state=Config.RANDOM_STATE,
         )
 
         # Save models
@@ -134,8 +133,8 @@ def main():
         visualizer.plot_predictions_vs_actual("Random Forest", Config.PLOTS_DIR)
         visualizer.plot_predictions_vs_actual("XGboost", Config.PLOTS_DIR)
 
-        visualizer.plot_predictions_over_time("Random Forest", Config.PLOTS_DIR)
-        visualizer.plot_predictions_over_time("XGboost", Config.PLOTS_DIR)
+        # visualizer.plot_predictions_over_time("Random Forest", Config.PLOTS_DIR)
+        # visualizer.plot_predictions_over_time("XGboost", Config.PLOTS_DIR)
 
         # Step 4: Generate Summary Report
         print("\nGENERATING SUMMARY REPORT")
