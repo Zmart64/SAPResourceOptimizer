@@ -27,7 +27,7 @@ class DataPreprocessor:
         df["max_rss_mb"] = df["max_rss"] / (1024 * 1024)
         df["max_cache_mb"] = df["max_cache"] / (1024 * 1024)
         # Add memreq_mb conversion
-        df["memreq_mb"] = df["memreq"] / (1024 * 1024)
+        df["memreq_mb"] = df["memreq"]
         return df
 
     def filter_successful_builds(self, df: pd.DataFrame):

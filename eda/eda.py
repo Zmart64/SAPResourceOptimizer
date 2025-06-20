@@ -14,7 +14,7 @@ print(f"Dataset shape: {df.shape}")
 # Convert memory values to MB for better readability
 df["max_rss_mb"] = df["max_rss"] / (1024**2)
 df["max_cache_mb"] = df["max_cache"] / (1024**2)
-df["memreq_mb"] = df["memreq"] / (1024**2)
+df["memreq_mb"] = df["memreq"]
 
 print("\n=== TARGET VARIABLE ANALYSIS (max_rss in MB) ===")
 print(f"Min: {df['max_rss_mb'].min():.2f} MB")
@@ -600,90 +600,42 @@ plt.plot(
     color="red",
 )
 plt.xlabel("Days")
-plt.ylabel("Average Memory (MB)")
-plt.title("Daily Average Memory Usage and Requests Over Time")
+plt.ylabel("Memory (MB)")
+plt.title("Daily Average max_rss (MB) and Average memreq (MB) Over Time")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig("/home/krebs/Distributed_Systems_Project/eda/plots/15_daily_max_rss.png")
 plt.close()
 
-# # Hourly memory usage pattern
-# plt.figure(figsize=(10, 6))
-# hourly_memory = df.groupby("hour")["max_rss_mb"].mean()
-# hourly_memreq = df.groupby("hour")["memreq_mb"].mean()
-# plt.plot(
-#     hourly_memory.index,
-#     hourly_memory.values,
-#     marker="o",
-#     linewidth=2,
-#     color="orange",
-#     label="max_rss",
-# )
-# plt.plot(
-#     hourly_memreq.index,
-#     hourly_memreq.values,
-#     marker="s",
-#     linewidth=2,
-#     color="green",
-#     label="memreq",
-# )
-# plt.xlabel("Hour of Day")
-# plt.ylabel("Average Memory (MB)")
-# plt.title("Hourly Memory Usage and Requests")
-# plt.legend()
-# plt.grid(True, alpha=0.3)
-# plt.tight_layout()
-# plt.savefig("/home/krebs/Distributed_Systems_Project/eda/plots/16_hourly_max_rss.png")
-# plt.close()
-
-# Memory failures vs max_rss
+# Hourly memory usage pattern
 plt.figure(figsize=(10, 6))
-failed_builds = df[df["memory_fail_count"] > 0]
-successful_builds = df[df["memory_fail_count"] == 0]
-plt.hist(
-    [successful_builds["max_rss_mb"], failed_builds["max_rss_mb"]],
-    bins=30,
-    alpha=0.7,
-    label=["No Failures", "With Failures"],
-    color=["green", "red"],
+hourly_memory = df.groupby("hour")["max_rss_mb"].mean()
+hourly_memreq = df.groupby("hour")["memreq_mb"].mean()
+plt.plot(
+    hourly_memory.index,
+    hourly_memory.values,
+    marker="o",
+    linewidth=2,
+    label="max_rss",
+    color="blue",
 )
-plt.xlabel("max_rss (MB)")
-plt.ylabel("Frequency")
-plt.title("max_rss: Failed vs Successful Builds")
+plt.plot(
+    hourly_memreq.index,
+    hourly_memreq.values,
+    marker="s",
+    linewidth=2,
+    label="memreq",
+    color="red",
+)
+plt.xlabel("Hour of Day")
+plt.ylabel("Memory (MB)")
+plt.title("Hourly Average max_rss (MB) and Average memreq (MB) Over Time")
 plt.legend()
-plt.yscale("log")
+plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig("/home/krebs/Distributed_Systems_Project/eda/plots/17_memory_failures.png")
+plt.savefig("/home/krebs/Distributed_Systems_Project/eda/plots/16_hourly_max_rss.png")
 plt.close()
-
-
-# Memory cache vs max_rss
-plt.figure(figsize=(10, 6))
-plt.scatter(df["max_cache_mb"], df["max_rss_mb"], alpha=0.5, s=10)
-plt.xlabel("max_cache (MB)")
-plt.ylabel("max_rss (MB)")
-plt.title("max_cache vs max_rss")
-plt.xscale("log")
-plt.yscale("log")
-plt.tight_layout()
-plt.savefig(
-    "/home/krebs/Distributed_Systems_Project/eda/plots/18_max_cache_vs_max_rss.png"
-)
-plt.close()
-
-df["memory_overuse"] = df["max_rss_mb"] / df["memreq_mb"]
-print(f"\nAverage memory overuse ratio: {df['memory_overuse'].mean():.3f}")
-print(f"Median memory overuse ratio: {df['memory_overuse'].median():.3f}")
-print("Memory overuse distribution:")
-print(f"  < 0.5x requested: {(df['memory_overuse'] < 0.5).mean() * 100:.1f}%")
-print(
-    f"  0.5x - 1.0x:      {((df['memory_overuse'] >= 0.5) & (df['memory_overuse'] <= 1.0)).mean() * 100:.1f}%"
-)
-print(
-    f"  1.0x - 2.0x:      {((df['memory_overuse'] > 1.0) & (df['memory_overuse'] <= 2.0)).mean() * 100:.1f}%"
-)
-print(f"  > 2.0x requested: {(df['memory_overuse'] > 2.0).mean() * 100:.1f}%")
 
 hourly_memory = df.groupby("hour")["max_rss_mb"].mean()
 daily_memory = df.groupby("day_of_week")["max_rss_mb"].mean()
@@ -699,19 +651,90 @@ for day_num in range(7):
         print(f"  {days[day_num]:9s}: {daily_memory[day_num]:6.1f} MB")
 
 
+# Memory failures vs max_rss
+plt.figure(figsize=(10, 6))
+memory_fail_builds = df[df["memory_fail_count"] > 0]
+successful_builds = df[df["memory_fail_count"] == 0]
+plt.hist(
+    [successful_builds["max_rss_mb"], memory_fail_builds["max_rss_mb"]],
+    bins=30,
+    alpha=0.7,
+    label=["No Failures", "With Failures"],
+    color=["green", "red"],
+)
+plt.xlabel("max_rss (MB)")
+plt.ylabel("Frequency")
+plt.title("max_rss: Failed vs Successful Builds")
+plt.legend()
+plt.yscale("log")
+plt.tight_layout()
+plt.savefig("/home/krebs/Distributed_Systems_Project/eda/plots/17_memory_failures.png")
+plt.close()
+
+# Memory cache vs max_rss
+plt.figure(figsize=(10, 6))
+plt.scatter(df["max_cache_mb"], df["max_rss_mb"], alpha=0.5, s=10)
+plt.xlabel("max_cache (MB)")
+plt.ylabel("max_rss (MB)")
+plt.title("max_cache vs max_rss")
+plt.xscale("log")
+plt.yscale("log")
+plt.tight_layout()
+plt.savefig(
+    "/home/krebs/Distributed_Systems_Project/eda/plots/18_max_cache_vs_max_rss.png"
+)
+plt.close()
+
+# Calculate memory overallocation
+df["memory_overallocation"] = df["memreq_mb"] / df["max_rss_mb"]
+print(
+    f"\nAverage memory overallocation ratio: {df['memory_overallocation'].mean():.3f}"
+)
+print(f"Median memory overallocation ratio: {df['memory_overallocation'].median():.3f}")
+print("Memory overallocation distribution:")
+
+memory_overallocation_0_5 = ((df["memory_overallocation"] < 0.5).mean()) * 100
+memory_overallocation_0_5_1_0 = (
+    (df["memory_overallocation"] >= 0.5) & (df["memory_overallocation"] <= 1.0)
+).mean() * 100
+memory_overallocation_1_0_2_0 = (
+    (df["memory_overallocation"] > 1.0) & (df["memory_overallocation"] <= 2.0)
+).mean() * 100
+memory_overallocation_2_0 = (df["memory_overallocation"] > 2.0).mean() * 100
+
+print(f"< 0.5x:             {memory_overallocation_0_5:.1f}%")  # underallocated
+print(f"0.5x - 1.0x:        {memory_overallocation_0_5_1_0:.1f}%")  # underallocated
+print(f"1.0x - 2.0x:        {memory_overallocation_1_0_2_0:.1f}%")  # overallocated
+print(f"> 2.0x requested:   {memory_overallocation_2_0:.1f}%")  # overallocated
+
+
+memory_fail_builds = df[df["memory_fail_count"] > 0]
+print(f"Number of builds with memory fail: {len(memory_fail_builds)}")
+if len(memory_fail_builds) > 0:
+    print("Memory overallocation ratios for fail builds:")
+    for idx, row in memory_fail_builds.iterrows():
+        print(
+            f"Build {idx}: memory_overallocation = {row['memory_overallocation']:.3f}, "
+            f"memory_fail_count = {row['memory_fail_count']}, "
+            f"max_rss_mb = {row['max_rss_mb']:.2f}, "
+            f"memreq_mb = {row['memreq_mb']:.2f}"
+        )
+else:
+    print("No builds with memory failures found.")
+
 # Memory overuse distribution
 plt.figure(figsize=(10, 6))
 plt.hist(
-    df["memory_overuse"],
-    bins=50,
+    df["memory_overallocation"],
+    bins=5,
     alpha=0.7,
     color="lightcoral",
     edgecolor="black",
 )
-plt.axvline(x=4, color="red", linestyle="--", linewidth=2, label="Perfect Allocation")
-plt.xlabel("Memory Overuse Ratio")
+plt.axvline(x=1, color="red", linestyle="--", linewidth=2, label="Perfect Allocation")
+plt.xlabel("max_rss (MB) vs memreq (MB) Ratio")
 plt.ylabel("Frequency")
-plt.title("Memory Overuse Distribution")
+plt.title("Memory Ratio Distribution")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
@@ -726,7 +749,7 @@ plt.scatter(
     df["max_rss_mb"],
     alpha=0.5,
     s=20,
-    c=df["memory_overuse"],
+    c=df["memory_overallocation"],
     cmap="RdYlBu_r",
     vmin=0,
     vmax=3,
