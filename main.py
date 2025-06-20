@@ -61,11 +61,17 @@ def summerize_results(results, df_clean, file_path):
         f.write(f"Best performing model: {best_model}")
         f.write(f"Best R² score: {best_r2:.6f}")
 
-        # if "random_forest" in results and "importance" in results["random_forest"]:
-        #     f.write("\nTOP 10 FEATURE IMPORTANCE (Random Forest):\n")
-        #     importance_df = results["random_forest"]["importance"]
-        #     for _, row in importance_df.head(10).iterrows():
-        #         f.write(f"  {row['feature']}: {row['importance']:.4f}\n")
+        if "random_forest" in results and "importance" in results["random_forest"]:
+            f.write("\nTOP 10 FEATURE IMPORTANCE (Random Forest):\n")
+            importance_df = results["random_forest"]["importance"]
+            for _, row in importance_df.head(10).iterrows():
+                f.write(f"  {row['feature']}: {row['importance']:.4f}\n")
+
+        if "xgboost" in results and "importance" in results["xgboost"]:
+            f.write("\nTOP 10 FEATURE IMPORTANCE (XGBoost):\n")
+            importance_df = results["xgboost"]["importance"]
+            for _, row in importance_df.head(10).iterrows():
+                f.write(f"  {row['feature']}: {row['importance']:.4f}\n")
 
     print(f"Results summary saved to: {file_path}")
     print(f"Models saved in: {file_path}/models/")
@@ -139,7 +145,7 @@ def main():
         # Step 4: Generate Summary Report
         print("\nGENERATING SUMMARY REPORT")
         print("-" * 40)
-        results_path = f"{Config.RESULTS_DIR}/summary_report.txt"
+        results_path = f"{Config.RESULTS_DIR}/summary_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         summerize_results(results, df_clean, results_path)
 
         print("\nPipeline completed successfully!")
