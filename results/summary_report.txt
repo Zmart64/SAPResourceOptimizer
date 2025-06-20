@@ -1,0 +1,22 @@
+MAX_RSS memory usage prediction pipeline - RESULTS SUMMARY
+============================================================
+
+Generated on: 2025-06-16 15:51:40
+
+DATASET OVERVIEW:
+Processed records: 15,829
+Features: 0
+
+MODEL PERFORMANCE:
+
+Random Forest:
+  RMSE: 25374.51 MB
+  MAE: 19486.28 MB
+  R² Score: 0.540022
+
+XGBoost:
+  RMSE: 24638.26 MB
+  MAE: 18801.54 MB
+  R² Score: 0.566328
+
+KEY INSIGHTS:Best performing model: XGBoostBest R² score: 0.566328

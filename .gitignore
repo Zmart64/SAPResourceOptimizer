@@ -4,3 +4,5 @@
 /output
 __pycache__/
 .venv
+*/models/
+results/preprocessed_data.csv
