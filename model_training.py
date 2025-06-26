@@ -84,6 +84,7 @@ class ModelTrainer:
 
     def evaluate_model(self, model, x_test, y_test, model_name):
         """Evaluate model performance"""
+        print(f"-----------------TEST--------------   {x_test} and then shape: {x_test.shape}")
         predictions = model.predict(x_test)
 
         mse = mean_squared_error(y_test, predictions)

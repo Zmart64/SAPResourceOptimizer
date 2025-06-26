@@ -9,8 +9,8 @@ class Config:
     """Configuration class containing all project settings"""
 
     # Paths
-    BASE_PATH = "/home/krebs/Distributed_Systems_Project/"
-    DATA_DIR = os.path.join(BASE_PATH, "data")
+    BASE_PATH = "/home/wysokinska/Distributed_Systems_Project/"
+    DATA_DIR = os.path.join(BASE_PATH, "sap_data")
     DATA_FILE = "build-data.csv"
     DATA_PATH = os.path.join(DATA_DIR, DATA_FILE)
 

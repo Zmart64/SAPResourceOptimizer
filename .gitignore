@@ -1,8 +1,10 @@
 .DS_Store
 /data
+/sap_data
 /eda/output
 /output
 __pycache__/
 .venv
 */models/
 results/preprocessed_data.csv
+/NodeMetricsUnpacked
