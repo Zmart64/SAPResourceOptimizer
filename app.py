@@ -1,7 +1,9 @@
 import streamlit as st
+import altair as alt
 import pandas as pd
 import joblib
 import time
+from collections import deque
 from data_preprocessing import DataPreprocessor
 
 # --- Load models ---
@@ -19,24 +21,25 @@ preprocessed_df = preprocessed_df.sort_values("time").reset_index(drop=True)
 # --- Streamlit App ---
 st.title("📊 Real-time Memory Usage Prediction Simulator")
 
-# Sidebar: user sets number of time steps and delay
-num_steps = st.sidebar.slider("Total number of steps to simulate", 1, min(100, len(preprocessed_df)), 10)
+# Sidebar: Delay control
 delay_seconds = st.sidebar.slider("Delay between steps (seconds)", 1, 5, 2)
 
-st.write("### Simulation Progress")
+st.write("### Streaming Predictions (Last 10 steps)")
 output_placeholder = st.empty()
 chart_placeholder = st.empty()
 
-# --- Initialize results for plotting ---
+# --- Initialize deque (sliding window of size 10) ---
+window_size = 10
 results = {
-    "time": [],
-    "RF Prediction": [],
-    "XGB Prediction": [],
-    "Actual": []
+    "time": deque(maxlen=window_size),
+    "RF Prediction": deque(maxlen=window_size),
+    "XGB Prediction": deque(maxlen=window_size),
+    "Actual": deque(maxlen=window_size)
 }
 
 # --- Streaming loop ---
-for i in range(num_steps):
+i = 0
+while i < len(preprocessed_df):
     row = preprocessed_df.iloc[i]
     current_time = row["time"]
     input_features = pd.DataFrame([row[feature_columns]])
@@ -46,22 +49,63 @@ for i in range(num_steps):
     xgb_pred = xgb_model.predict(input_features)[0]
     actual = row["max_rss_mb"]
 
-    # Save results
+    # Update results window
     results["time"].append(current_time)
     results["RF Prediction"].append(rf_pred)
     results["XGB Prediction"].append(xgb_pred)
     results["Actual"].append(actual)
 
-    # Show latest predictions
-    output_placeholder.write(f"[{current_time}]  \n"
-                             f"🟦 RF: **{rf_pred:.2f} MB**  \n"
-                             f"🟥 XGB: **{xgb_pred:.2f} MB**  \n"
-                             f"🎯 Actual: **{actual:.2f} MB**  \n"
-                             f"🧮 RF Error: {(rf_pred - actual):+.2f} MB | XGB Error: {(xgb_pred - actual):+.2f} MB")
+    # Calculate errors
+    rf_error = rf_pred - actual
+    xgb_error = xgb_pred - actual
 
-    # Update chart
+    # Color classification using Streamlit's new markdown
+    def colorize_error(val):
+        if val < 0:
+            color = "red"
+        elif val <= 20000:
+            color = "green"
+        else:
+            color = "orange"
+        return f":{color}[{val:+.2f} MB]"
+
+    # Display latest prediction
+    output_placeholder.markdown(f"""
+                                **[{current_time}]**  
+                                🟨 RF: `{rf_pred:.2f} MB`  
+                                🟦 XGB: `{xgb_pred:.2f} MB`  
+                                🟥 Actual: `{actual:.2f} MB`  
+                                RF Error: {colorize_error(rf_error)} | XGB Error: {colorize_error(xgb_error)}
+                                """)
+
+    # Update chart with only last 10 points
     plot_df = pd.DataFrame(results)
-    chart_placeholder.line_chart(plot_df.set_index("time")[["RF Prediction", "XGB Prediction", "Actual"]])
+    # Melt the dataframe for Altair (long format)
+    melted_df = plot_df.melt(id_vars="time", var_name="Model", value_name="Memory")
 
-    # Wait before next step
+    # Define color mapping
+    color_scale = alt.Scale(
+    domain=["RF Prediction", "XGB Prediction", "Actual"],
+    range=["#d0b51c", "#1da4b3", "red"]  
+    )
+
+    # Create line chart
+    line_chart = alt.Chart(melted_df).mark_line(point=True).encode(
+        x=alt.X("time:T", title="Time"),
+        y=alt.Y("Memory:Q", title="Memory (MB)"),
+        color=alt.Color("Model:N", 
+                        title="Model",
+                        scale=alt.Scale(
+                            domain=["RF Prediction", "XGB Prediction", "Actual"],
+                            range=["#f8e515", "#13d6c9", "red"]
+                        )),
+        tooltip=["time:T", "Model:N", "Memory:Q"]
+    ).properties(
+        width=700,
+        height=400
+)
+
+    chart_placeholder.altair_chart(line_chart, use_container_width=True)
+
     time.sleep(delay_seconds)
+    i += 1
