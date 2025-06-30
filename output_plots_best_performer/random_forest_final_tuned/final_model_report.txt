@@ -1,0 +1,36 @@
+Final Tuned Model Report for: 'random_forest'
+NOTE: This report is based on TimeSeries-Cross-Validation on the first 80% of the data.
+The final 20% of the data was held out for simulation.
+Bin Edges (GB): [3.0000e-02 5.7720e+01 1.1541e+02 1.7309e+02 2.3078e+02]
+
+--- Best Hyperparameters from GridSearchCV ---
+{'max_depth': 8, 'max_features': 'sqrt', 'min_samples_leaf': 3, 'n_estimators': 300}
+
+--- Classification Report (from CV on Training Set) ---
+              precision    recall  f1-score   support
+
+          C0       0.65      0.60      0.63      4828
+          C1       0.69      0.79      0.74      7580
+          C2       0.82      0.42      0.56      1310
+          C3       0.89      0.11      0.20        73
+
+    accuracy                           0.69     13791
+   macro avg       0.76      0.48      0.53     13791
+weighted avg       0.69      0.69      0.68     13791
+
+
+--- Overall Memory Allocation Summary (from CV on Training Set) ---
+Total Jobs Evaluated in CV: 13791
+Total True Memory Used (GB): 997015.88
+Total Memory Allocated (GB): 1374362.31
+Total OVER-Allocated Memory (GB): 428302.82
+Total UNDER-Allocated Amount (GB, where alloc < rss): 50956.39
+Percentage Total Over-allocation relative to True Usage: 42.96%
+
+--- Detailed Allocation Categories (13791 jobs) ---
+Perfectly Allocated (alloc approx= true):           0 jobs (  0.00%)
+Under-allocated (alloc < true):                2312 jobs ( 16.76%)
+Well-allocated Over (true <= alloc < 2*true):    8409 jobs ( 60.97%)
+Severely Over-allocated (2*true <= alloc < 3*true):   1819 jobs ( 13.19%)
+Extremely Over-allocated (3*true <= alloc < 4*true):   686 jobs (  4.97%)
+Massively Over-allocated (alloc >= 4*true):       565 jobs (  4.10%)
