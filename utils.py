@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def split_data(df: pd.DataFrame, split_size: float, output_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     # first sort the values by time
     df = df.sort_values('time').reset_index(drop=True)
@@ -20,8 +21,9 @@ def split_data(df: pd.DataFrame, split_size: float, output_dir: str) -> tuple[pd
 
     return train_df, simulate_df
 
+
 if __name__ == "__main__":
-    df = pd.read_csv("/home/wysokinska/Distributed_Systems_Project/sap_data/build-data.csv", delimiter=";")
-    output_dir = "sap_data/split_data"
+    df = pd.read_csv("build-data-sorted.csv", delimiter=";")
+    output_dir = "split_data"
 
     split_data(df, 0.8, output_dir)
