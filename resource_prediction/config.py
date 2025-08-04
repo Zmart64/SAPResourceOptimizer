@@ -20,8 +20,12 @@ class Config:
     X_TEST_PATH = PROCESSED_DATA_DIR / "X_test.pkl"
     Y_TEST_PATH = PROCESSED_DATA_DIR / "y_test.pkl"
 
-    OUTPUT_DIR = PROJECT_ROOT / "output_classification"
-    OPTIMIZATION_SUMMARY_PATH = OUTPUT_DIR / "optimization_summary.csv"
+    OUTPUT_DIR = PROJECT_ROOT / "output"
+    OPTIMIZATION_SUMMARY_PATH = OUTPUT_DIR / \
+        "optimization_summary_classification.csv"
+
+    FINAL_EVALUATION_REPORT_PATH = OUTPUT_DIR / \
+        "final_evaluation_report_classification.csv"
 
     # Data and Feature Engineering
     TARGET_COLUMN_RAW = "max_rss"
@@ -32,8 +36,8 @@ class Config:
     TEST_SET_FRACTION = 0.2
     N_SPLITS_CV = 3
     MODELS_TO_OPTIMIZE = ['catboost', 'lightgbm', 'xgboost']
-    # Increase for more thorough search (> 5)
-    N_OPTIMIZATION_CALLS_PER_MODEL = 10
+    # Increase for more thorough search (must be > 5)
+    N_OPTIMIZATION_CALLS_PER_MODEL = 200
     RANDOM_STATE = 42
 
     # Bayesian Optimization Search Spaces (Classification)

@@ -76,7 +76,7 @@ class Trainer:
         bin_edges, num_classes = sorted(
             list(set(bin_edges))), len(bin_edges) - 1
         y_train_binned = pd.cut(y_train_gb, bins=bin_edges, labels=range(
-            num_classes), right=False, include_lowest=True)
+            num_classes), right=True, include_lowest=True)
 
         print(
             f"--- Training final {best_model_name.upper()} model on {len(X_train)} samples ---")
