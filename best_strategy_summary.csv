@@ -1,2 +1,0 @@
-model_name,strategy_name,num_classes,bin_edges,perc_under_allocation,perc_total_over_allocation,avg_over_allocation_per_job_gb,perc_well_over_1x_2x,perc_severe_over_2x_3x,perc_extreme_over_3x_4x,perc_massive_over_4x_plus
-random_forest,best_optimized_uniform_4bins,4,"[0.028224945068359375, 57.716979026794434, 115.40573310852051, 173.09448719024658, 230.78324127197266]",16.62896583724842,44.98547970675547,31.732496093441124,59.4977089495969,13.508497186938111,5.573922626297779,4.790905399918798
