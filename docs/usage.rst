@@ -113,6 +113,19 @@ The pipeline uses `Optuna <https://optuna.org/>`_ for automated hyperparameter t
 - **Parallel Execution**: Multiple trials run concurrently for efficiency
 - **Pruning**: Early stopping for unpromising trials
 
+**Classification-Specific Hyperparameters**
+
+For classification models, the pipeline treats the discretization of continuous memory values as hyperparameters:
+
+- **Number of Bins** (``n_bins``): Optimized range of 3-15 bins for memory value discretization
+- **Binning Strategy** (``strategy``): Choice between three approaches:
+  
+  - ``uniform``: Equal-width bins across the memory range
+  - ``quantile``: Bins based on quantiles of the data distribution
+  - ``kmeans``: Bins determined by K-means clustering centers
+
+This approach allows the system to find the optimal granularity for converting the continuous memory prediction problem into a multi-class classification task, balancing prediction precision with model complexity.
+
 **Business Function**
 
 The optimization objective combines two critical business metrics:
