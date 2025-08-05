@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
+from sklearn.cluster import KMeans
 import xgboost as xgb
 import lightgbm as lgb
 import catboost as ctb
@@ -129,11 +130,29 @@ class Trainer:
             alloc = model.predict(X_test_fs)
 
         else:  # Classification
+            n_bins = best_params.pop("n_bins")
+            strategy = best_params.pop("strategy")
             if 'lr' in best_params:
                 best_params['learning_rate'] = best_params.pop('lr')
 
-            _, bin_edges = pd.qcut(
-                y_train_gb, q=15, retbins=True, duplicates='drop')
+            min_val, max_val = y_train_gb.min(), y_train_gb.max()
+            if strategy == 'quantile':
+                try:
+                    _, bin_edges = pd.qcut(
+                        y_train_gb, q=n_bins, retbins=True, duplicates='drop')
+                except ValueError:
+                    bin_edges = np.linspace(min_val, max_val, n_bins + 1)
+            elif strategy == 'uniform':
+                bin_edges = np.linspace(min_val, max_val, n_bins + 1)
+            else:  # kmeans
+                kmeans = KMeans(n_clusters=n_bins, random_state=config.RANDOM_STATE, n_init='auto').fit(
+                    y_train_gb.values.reshape(-1, 1))
+                centers = sorted(kmeans.cluster_centers_.flatten())
+                edges = [(centers[i] + centers[i+1]) /
+                         2 for i in range(len(centers)-1)]
+                bin_edges = np.array([min_val] + edges + [max_val])
+            bin_edges = sorted(list(set(bin_edges)))
+
             y_train_binned = pd.cut(
                 y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
             X_train_enc = pd.get_dummies(
@@ -209,6 +228,7 @@ class Trainer:
             print("  - No successful models found to evaluate.")
             return
 
+        print("\nSubmitting model evaluation tasks to be run in parallel...")
         regression_results, classification_results = [], []
 
         with ProcessPoolExecutor(max_workers=len(models_to_evaluate)) as executor:
@@ -248,10 +268,21 @@ class Trainer:
             all_results = pd.concat([pd.DataFrame(regression_results), pd.DataFrame(
                 classification_results)], ignore_index=True)
             if not all_results.empty:
+                # To catch optimization issues that produce large outliers
+                use_log_scale = False
+                if all_results['score_hold'].max() > 10 * all_results['score_hold'].median():
+                    print(
+                        "Warning: A large outlier was detected in the scores. Using a logarithmic scale for better visualization.")
+                    use_log_scale = True
+
                 plt.figure(figsize=(10, 8))
                 order = all_results.sort_values("score_hold")["model"]
                 sns.barplot(data=all_results, y="model",
                             x="score_hold", order=order, color="steelblue")
+
+                if use_log_scale:
+                    plt.xscale('log')
+
                 plt.xlabel("Hold-out Set Business Score (Lower is Better)")
                 plt.ylabel("Model Architecture")
                 plt.title("Final Model Performance on Hold-out Data")

@@ -1,2 +1,4 @@
-model,score_cv,use_quant_feats,alpha,safety,gb_n_estimators,gb_max_depth,gb_lr,xgb_n_estimators,xgb_max_depth,xgb_lr,under_pct_hold,mean_gb_wasted_hold,total_over_pct_hold,score_hold
-quantile_ensemble,90.28911527844781,False,0.9,1.0048761811148317,566,4,0.0800589567922634,415,6,0.03441055614619019,13.48986437217442,29.422285951697447,38.84819702759608,106.29751888846818
+model,score_cv,use_quant_feats,n_estimators,max_depth,min_samples_leaf,under_pct_hold,mean_gb_wasted_hold,total_over_pct_hold,score_hold,alpha,safety,gb_n_estimators,gb_max_depth,gb_lr,xgb_n_estimators,xgb_max_depth,xgb_lr,learning_rate
+rf_regression,260.8739435448873,True,493.0,15.0,6.0,49.55519906664722,10.807334573555584,14.269641167443565,262.0456365006797,,,,,,,,,
+quantile_ensemble,90.28911527844781,False,,,,13.48986437217442,29.422285951697447,38.84819702759608,106.29751888846818,0.9,1.0048761811148317,566.0,4.0,0.0800589567922634,415.0,6.0,0.03441055614619019,
+xgboost_regression,258.3074096764971,True,486.0,10.0,,49.05935540323757,10.856026070066143,14.333931782153655,259.6307087983415,0.7996254680102759,,,,,,,,0.012718749445473156

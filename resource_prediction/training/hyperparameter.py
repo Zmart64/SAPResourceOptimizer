@@ -9,6 +9,7 @@ from datetime import datetime
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.cluster import KMeans
 import xgboost as xgb
 import lightgbm as lgb
 import catboost as ctb
@@ -46,15 +47,7 @@ class QuantileEnsemblePredictor:
         return Xd.astype(float)
 
     def fit(self, X, y, **fit_params):
-        """
-        Fits both underlying regressors on the training data.
-
-        Args:
-            X (pd.DataFrame): The feature matrix.
-            y (pd.Series): The target vector.
-            **fit_params: Additional parameters passed to the fit method of
-                          the underlying XGBoost model (e.g., for verbosity).
-        """
+        """Fits both underlying regressors on the training data."""
         Xd = self._encode(X, fit=True)
         self.gb.fit(Xd, y)
         self.xgb.fit(Xd, y, **fit_params)
@@ -109,9 +102,29 @@ class OptunaOptimizer:
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics)
 
-    def _evaluate_classification(self, model, X, y):
+    def _evaluate_classification(self, model, X, y, n_bins, strategy):
         """Evaluates a classification model using time-series cross-validation."""
-        _, bin_edges = pd.qcut(y, q=15, retbins=True, duplicates='drop')
+        min_val, max_val = y.min(), y.max()
+        if strategy == 'quantile':
+            try:
+                _, bin_edges = pd.qcut(
+                    y, q=n_bins, retbins=True, duplicates='drop')
+            except ValueError:
+                bin_edges = np.linspace(min_val, max_val, n_bins + 1)
+        elif strategy == 'uniform':
+            bin_edges = np.linspace(min_val, max_val, n_bins + 1)
+        else:  # kmeans
+            kmeans = KMeans(n_clusters=n_bins, random_state=self.config.RANDOM_STATE, n_init='auto').fit(
+                y.values.reshape(-1, 1))
+            centers = sorted(kmeans.cluster_centers_.flatten())
+            edges = [(centers[i] + centers[i+1]) /
+                     2 for i in range(len(centers)-1)]
+            bin_edges = np.array([min_val] + edges + [max_val])
+
+        bin_edges = sorted(list(set(bin_edges)))
+        if len(bin_edges) < 2:
+            return 1e9  # Return a high score if binning fails
+
         y_binned = pd.cut(y, bins=bin_edges, labels=False,
                           include_lowest=True, right=True)
         X_encoded = pd.get_dummies(
@@ -152,6 +165,8 @@ class OptunaOptimizer:
                 raise ValueError(f"Unknown regression model: {base_model}")
             return self._evaluate_regression(model, X_trial, self.y_train_gb)
         else:  # Classification
+            n_bins = params.pop("n_bins")
+            strategy = params.pop("strategy")
             if 'lr' in params:
                 params['learning_rate'] = params.pop('lr')
 
@@ -172,7 +187,7 @@ class OptunaOptimizer:
                     **params, max_iter=1000, n_jobs=1, random_state=self.config.RANDOM_STATE, multi_class="auto")
             if model is None:
                 raise ValueError(f"Unknown classification model: {base_model}")
-            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb, n_bins, strategy)
 
     def run(self):
         """Runs the complete Optuna optimization for all configured model families."""

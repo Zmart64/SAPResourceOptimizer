@@ -45,7 +45,7 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 2
+    N_CALLS_PER_FAMILY = 120
     NUM_PARALLEL_WORKERS = None
 
     MODEL_FAMILIES = {
@@ -104,17 +104,33 @@ class Config:
                 }
 
         elif task_type == 'classification':
+            common_params = {
+                "n_bins": trial.suggest_int("n_bins", 3, 15),
+                "strategy": trial.suggest_categorical("strategy", ["uniform", "quantile", "kmeans"]),
+                "use_quant_feats": use_quant
+            }
+
             if base_model in ['xgboost', 'lightgbm', 'catboost']:
                 lr = trial.suggest_float("lr", 0.01, 0.2, log=True)
                 if base_model == 'xgboost':
-                    return {"n_estimators": trial.suggest_int("n_estimators", 200, 800), "max_depth": trial.suggest_int("max_depth", 4, 10), "learning_rate": lr, "use_quant_feats": use_quant}
-                if base_model == 'lightgbm':
-                    return {"n_estimators": trial.suggest_int("n_estimators", 200, 800), "max_depth": trial.suggest_int("max_depth", 4, 10), "num_leaves": trial.suggest_int("num_leaves", 20, 64), "learning_rate": lr, "use_quant_feats": use_quant}
-                if base_model == 'catboost':
-                    return {"iterations": trial.suggest_int("iterations", 200, 800), "depth": trial.suggest_int("depth", 4, 10), "learning_rate": lr, "use_quant_feats": use_quant}
+                    model_params = {"n_estimators": trial.suggest_int(
+                        "n_estimators", 200, 800), "max_depth": trial.suggest_int("max_depth", 4, 10), "lr": lr}
+                elif base_model == 'lightgbm':
+                    model_params = {"n_estimators": trial.suggest_int("n_estimators", 200, 800), "max_depth": trial.suggest_int(
+                        "max_depth", 4, 10), "num_leaves": trial.suggest_int("num_leaves", 20, 64), "lr": lr}
+                else:  # catboost
+                    model_params = {"iterations": trial.suggest_int(
+                        "iterations", 200, 800), "depth": trial.suggest_int("depth", 4, 10), "lr": lr}
+                return {**common_params, **model_params}
+
             if base_model == 'random_forest':
-                return {"n_estimators": trial.suggest_int("n_estimators", 200, 700), "max_depth": trial.suggest_int("max_depth", 6, 15), "use_quant_feats": use_quant}
+                model_params = {"n_estimators": trial.suggest_int(
+                    "n_estimators", 200, 700), "max_depth": trial.suggest_int("max_depth", 6, 15)}
+                return {**common_params, **model_params}
+
             if base_model == 'logistic_regression':
-                return {"C": trial.suggest_float("C", 1e-2, 10.0, log=True), "use_quant_feats": use_quant}
+                model_params = {"C": trial.suggest_float(
+                    "C", 1e-2, 10.0, log=True)}
+                return {**common_params, **model_params}
 
         return {}

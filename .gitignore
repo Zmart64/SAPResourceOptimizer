@@ -1,5 +1,5 @@
 .DS_Store
-/data
+/data/processed
 __pycache__
 
 # Sphinx documentation
