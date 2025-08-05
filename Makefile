@@ -31,8 +31,8 @@ serve: html
 
 # Install documentation dependencies
 install-docs:
-	@echo "Installing documentation dependencies..."
-	@.venv/bin/pip install sphinx sphinx-rtd-theme
+	@echo "Installing documentation dependencies via Poetry..."
+	@poetry add --group dev sphinx sphinx-rtd-theme
 
 # Quick rebuild and serve
 dev: clean html serve
