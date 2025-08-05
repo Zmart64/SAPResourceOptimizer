@@ -1,3 +1,5 @@
+"""Data preprocessing pipeline for build telemetry."""
+
 import pandas as pd
 import numpy as np
 from resource_prediction.config import Config

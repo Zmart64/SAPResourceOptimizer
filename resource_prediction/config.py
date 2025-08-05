@@ -1,3 +1,5 @@
+"""Project configuration and hyperparameter search spaces."""
+
 from pathlib import Path
 
 

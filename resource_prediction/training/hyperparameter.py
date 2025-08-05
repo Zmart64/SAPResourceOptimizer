@@ -1,3 +1,5 @@
+"""Hyperparameter optimisation utilities using Optuna."""
+
 import pandas as pd
 import numpy as np
 import multiprocessing
