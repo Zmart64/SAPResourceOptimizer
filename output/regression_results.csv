@@ -1,0 +1,2 @@
+model,score_cv,use_quant_feats,alpha,safety,gb_n_estimators,gb_max_depth,gb_lr,xgb_n_estimators,xgb_max_depth,xgb_lr,under_pct_hold,mean_gb_wasted_hold,total_over_pct_hold,score_hold
+quantile_ensemble,90.28911527844781,False,0.9,1.0048761811148317,566,4,0.0800589567922634,415,6,0.03441055614619019,13.48986437217442,29.422285951697447,38.84819702759608,106.29751888846818

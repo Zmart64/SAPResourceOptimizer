@@ -1,0 +1,2 @@
+model,score_cv,use_quant_feats,lr,n_estimators,max_depth,num_leaves,under_pct_hold,mean_gb_wasted_hold,total_over_pct_hold,score_hold
+lightgbm_classification,192.50592411024746,True,0.01963691753398408,455,6,62,40.3529240192504,22.699766525321216,29.97200842598815,231.73662852224015

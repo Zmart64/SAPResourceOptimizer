@@ -1,131 +1,259 @@
 import pandas as pd
 import numpy as np
-import ast
-import xgboost
-import lightgbm
-import catboost
-from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import seaborn as sns
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
+
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LogisticRegression
+import xgboost as xgb
+import lightgbm as lgb
+import catboost as ctb
 
 from resource_prediction.config import Config
-from resource_prediction.training.hyperparameter import BayesianOptimizer
+from resource_prediction.training.hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
 
 
 class Trainer:
-    """Orchestrates model optimization and final evaluation on the holdout test set."""
+    """
+    Orchestrates the ML pipeline: search, final evaluation, and reporting.
+    """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None):
+        """
+        Initializes the Trainer and loads all necessary data splits.
+
+        Args:
+            config (Config): The project's configuration object.
+            evaluate_all_archs (bool): If True, evaluates all model architectures.
+                                       Otherwise, evaluates only the two champions.
+            task_type_filter (str | None): If provided, filters the pipeline to
+                                           run only for 'regression' or 'classification'.
+        """
         self.config = config
+        self.evaluate_all_archs = evaluate_all_archs
+        self.task_type_filter = task_type_filter
+        self.X_train, self.y_train, self.X_test, self.y_test = self._load_data()
 
-    def run_bayesian_optimization(self):
-        """Runs optimization using ONLY the training data."""
-        print("--- Loading Training Data for Optimization ---")
+    def _load_data(self):
+        """Loads all preprocessed data splits from disk."""
         try:
             X_train = pd.read_pickle(self.config.X_TRAIN_PATH)
             y_train = pd.read_pickle(self.config.Y_TRAIN_PATH)
+            X_test = pd.read_pickle(self.config.X_TEST_PATH)
+            y_test = pd.read_pickle(self.config.Y_TEST_PATH)
+            return X_train, y_train, X_test, y_test
         except FileNotFoundError:
-            print(
-                "Error: Training data not found. Please run preprocessing first (without --skip-preprocessing).")
+            print("Error: Processed data not found. Please run preprocessing first.")
+            return None, None, None, None
+
+    def run_optimization_and_evaluation(self):
+        """
+        Runs the full pipeline: hyperparameter search followed by final
+        evaluation on the hold-out test set and report generation.
+        """
+        if self.X_train is None:
+            print("Exiting due to missing data.")
             return
 
-        optimizer = BayesianOptimizer(
-            config=self.config, X_train=X_train, y_train=y_train)
-        optimizer.run()
+        print("\nInitiating hyperparameter search...")
+        optimizer = OptunaOptimizer(
+            self.config, self.X_train, self.y_train, self.task_type_filter)
+        studies = optimizer.run()
 
-    def evaluate_best_model_on_test_set(self):
-        """
-        Loads the best model from the optimization summary, trains it on the
-        full training set, and evaluates it on the holdout test set.
-        """
-        print("\n--- Starting Final Evaluation on Holdout Test Set ---")
+        self._evaluate_and_report(studies)
 
-        try:
-            summary = pd.read_csv(
-                self.config.OPTIMIZATION_SUMMARY_PATH).iloc[0]
-            best_model_name = summary['model_name']
-            best_params = ast.literal_eval(summary['best_params_from_grid'])
-        except (FileNotFoundError, IndexError):
-            print(
-                f"Error: Could not load optimization summary from {self.config.OPTIMIZATION_SUMMARY_PATH}")
-            print("Please run the optimization first with '--run-optimization'.")
-            return
-
-        print("--- Loading all data splits for final evaluation ---")
-        X_train = pd.read_pickle(self.config.X_TRAIN_PATH)
-        y_train = pd.read_pickle(self.config.Y_TRAIN_PATH)
-        X_test = pd.read_pickle(self.config.X_TEST_PATH)
-        y_test = pd.read_pickle(self.config.Y_TEST_PATH)
-
-        y_train_gb = y_train[self.config.TARGET_COLUMN_PROCESSED]
-        y_test_gb = y_test[self.config.TARGET_COLUMN_PROCESSED]
-
-        print("--- Re-creating binning strategy from training data ---")
-        n_bins, strategy = best_params['n_bins'], best_params['strategy']
-        min_val, max_val = y_train_gb.min(), y_train_gb.max()
-        if strategy == 'quantile':
-            _, bin_edges = pd.qcut(y_train_gb, q=n_bins,
-                                   retbins=True, duplicates='drop')
-        elif strategy == 'uniform':
-            bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-        else:
-            kmeans = KMeans(n_clusters=n_bins, random_state=self.config.RANDOM_STATE, n_init='auto').fit(
-                y_train_gb.values.reshape(-1, 1))
-            centers = sorted(kmeans.cluster_centers_.flatten())
-            edges = [(centers[i] + centers[i+1]) /
-                     2 for i in range(len(centers)-1)]
-            bin_edges = np.array([min_val] + edges + [max_val])
-        bin_edges, num_classes = sorted(
-            list(set(bin_edges))), len(bin_edges) - 1
-        y_train_binned = pd.cut(y_train_gb, bins=bin_edges, labels=range(
-            num_classes), right=True, include_lowest=True)
-
-        print(
-            f"--- Training final {best_model_name.upper()} model on {len(X_train)} samples ---")
-        model_hyperparams = {k: v for k, v in best_params.items(
-        ) if k not in ['n_bins', 'strategy', 'confidence_threshold']}
-
-        if best_model_name == 'xgboost':
-            model = xgboost.XGBClassifier(
-                **model_hyperparams, random_state=self.config.RANDOM_STATE, n_jobs=-1)
-        elif best_model_name == 'lightgbm':
-            model = lightgbm.LGBMClassifier(
-                **model_hyperparams, random_state=self.config.RANDOM_STATE, n_jobs=-1, verbose=-1)
-        else:
-            model = catboost.CatBoostClassifier(
-                **model_hyperparams, random_state=self.config.RANDOM_STATE, verbose=0, thread_count=-1)
-
-        model.fit(X_train, y_train_binned)
-
-        print(f"--- Evaluating model on {len(X_test)} unseen test samples ---")
-        y_pred_probs = model.predict_proba(X_test)
-        y_pred_base = np.argmax(y_pred_probs, axis=1)
-        confidence_threshold = best_params['confidence_threshold']
-        y_pred_final = [min(pred + 1, num_classes - 1) if conf < confidence_threshold else pred
-                        for pred, conf in zip(y_pred_base, y_pred_probs[np.arange(len(y_pred_base)), y_pred_base])]
-
-        allocated_mem_pred = np.array(
-            [bin_edges[min(c + 1, num_classes)] for c in y_pred_final])
-        true_mem_test = y_test_gb.values
-
-        total_jobs, jobs_under = len(true_mem_test), np.sum(
-            allocated_mem_pred < true_mem_test)
-        over_allocation_gb = np.sum(np.maximum(
-            0, allocated_mem_pred - true_mem_test))
-        total_true_used_gb = np.sum(true_mem_test)
-
-        final_metrics = {
-            'perc_under_allocation': (jobs_under / total_jobs) * 100,
-            'perc_total_over_allocation': (over_allocation_gb / total_true_used_gb) * 100 if total_true_used_gb > 0 else 0,
+    @staticmethod
+    def _allocation_metrics(allocated, true):
+        """Calculates key business metrics for memory allocation."""
+        under = np.sum(allocated < true)
+        over = np.maximum(0, allocated - true)
+        return {
+            "under_pct": 100 * under / len(true) if len(true) > 0 else 0,
+            "mean_gb_wasted": over.mean(),
+            "total_over_pct": 100 * over.sum() / true.sum() if true.sum() > 0 else 0,
         }
 
-        print("\n--- Final Test Set Performance ---")
-        print(
-            f"Percentage of jobs with under-allocated memory: {final_metrics['perc_under_allocation']:.2f}%")
-        print(
-            f"Percentage of total over-allocated memory: {final_metrics['perc_total_over_allocation']:.2f}%")
+    @staticmethod
+    def _business_score(metrics):
+        """Calculates the business score from a metrics dictionary."""
+        return metrics["under_pct"] * 5 + metrics["total_over_pct"]
 
-        report_df = pd.DataFrame([final_metrics])
-        report_df['model_name'] = best_model_name
-        report_df['best_params'] = str(best_params)
-        report_df.to_csv(self.config.FINAL_EVALUATION_REPORT_PATH, index=False)
-        print(
-            f"\nFinal evaluation report saved to {self.config.FINAL_EVALUATION_REPORT_PATH.resolve()}")
+    @staticmethod
+    def _evaluate_single_champion(study, config, X_train, y_train, X_test, y_test):
+        """
+        Fits and evaluates a single champion model on the hold-out set.
+        This function is designed to be run in a separate process.
+        """
+        family_name = '_'.join(study.study_name.split('_')[:-1])
+        metadata = config.MODEL_FAMILIES[family_name]
+        best_params = study.best_trial.params.copy()
+
+        use_quant = best_params.pop("use_quant_feats")
+        features = config.BASE_FEATURES + \
+            (config.QUANT_FEATURES if use_quant else [])
+        X_train_fs, X_test_fs = X_train[features], X_test[features]
+        y_train_gb, y_test_gb = y_train[config.TARGET_COLUMN_PROCESSED], y_test[config.TARGET_COLUMN_PROCESSED]
+
+        model, alloc, fit_params = None, None, {}
+
+        if metadata['type'] == 'regression':
+            if metadata['base_model'] == 'quantile_ensemble':
+                gb_params = {'n_estimators': best_params["gb_n_estimators"],
+                             'max_depth': best_params["gb_max_depth"], 'learning_rate': best_params["gb_lr"], 'verbose': 0}
+                xgb_params = {'n_estimators': best_params["xgb_n_estimators"],
+                              'max_depth': best_params["xgb_max_depth"], 'learning_rate': best_params["xgb_lr"]}
+                model = QuantileEnsemblePredictor(
+                    alpha=best_params["alpha"], safety=best_params["safety"], gb_params=gb_params, xgb_params=xgb_params)
+                fit_params['verbose'] = False
+            else:
+                if metadata['base_model'] == 'xgboost':
+                    model = xgb.XGBRegressor(
+                        **best_params, objective='reg:squarederror', n_jobs=-1, random_state=config.RANDOM_STATE)
+                    fit_params['verbose'] = False
+                elif metadata['base_model'] == 'random_forest':
+                    model = RandomForestRegressor(
+                        **best_params, n_jobs=-1, random_state=config.RANDOM_STATE, verbose=0)
+
+                X_train_fs = pd.get_dummies(
+                    X_train_fs, drop_first=True, dummy_na=False).astype(float)
+                X_test_fs = pd.get_dummies(
+                    X_test_fs, drop_first=True, dummy_na=False).astype(float)
+                X_test_fs = X_test_fs.reindex(
+                    columns=X_train_fs.columns, fill_value=0)
+
+            model.fit(X_train_fs, y_train_gb, **fit_params)
+            alloc = model.predict(X_test_fs)
+
+        else:  # Classification
+            if 'lr' in best_params:
+                best_params['learning_rate'] = best_params.pop('lr')
+
+            _, bin_edges = pd.qcut(
+                y_train_gb, q=15, retbins=True, duplicates='drop')
+            y_train_binned = pd.cut(
+                y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
+            X_train_enc = pd.get_dummies(
+                X_train_fs, drop_first=True, dummy_na=False).astype(float)
+            X_test_enc = pd.get_dummies(
+                X_test_fs, drop_first=True, dummy_na=False).astype(float)
+            X_test_enc = X_test_enc.reindex(
+                columns=X_train_enc.columns, fill_value=0)
+
+            if metadata['base_model'] == 'xgboost':
+                model = xgb.XGBClassifier(
+                    **best_params, objective="multi:softmax", n_jobs=-1, random_state=config.RANDOM_STATE)
+                fit_params['verbose'] = False
+            elif metadata['base_model'] == 'lightgbm':
+                model = lgb.LGBMClassifier(**best_params, objective="multiclass",
+                                           n_jobs=-1, random_state=config.RANDOM_STATE, verbose=-1, verbosity=-1)
+            elif metadata['base_model'] == 'catboost':
+                model = ctb.CatBoostClassifier(**best_params, loss_function="MultiClass", thread_count=-1,
+                                               random_state=config.RANDOM_STATE, verbose=0, allow_writing_files=False)
+            elif metadata['base_model'] == 'random_forest':
+                model = RandomForestClassifier(
+                    **best_params, n_jobs=-1, random_state=config.RANDOM_STATE, verbose=0)
+            elif metadata['base_model'] == 'logistic_regression':
+                model = LogisticRegression(
+                    **best_params, max_iter=1000, n_jobs=-1, random_state=config.RANDOM_STATE, verbose=0)
+
+            model.fit(X_train_enc, y_train_binned, **fit_params)
+            pred_class = model.predict(X_test_enc).astype(int)
+            alloc = bin_edges[np.minimum(pred_class + 1, len(bin_edges) - 1)]
+
+        hold_metrics = Trainer._allocation_metrics(alloc, y_test_gb.values)
+        hold_metrics["score"] = Trainer._business_score(hold_metrics)
+        result_row = {'model': family_name, 'score_cv': study.best_value, **
+                      study.best_trial.params, **{f"{k}_hold": v for k, v in hold_metrics.items()}}
+
+        return metadata['type'], result_row
+
+    def _evaluate_and_report(self, studies):
+        """
+        Finds models to evaluate based on the `evaluate_all_archs` flag,
+        evaluates them in parallel, and generates reports.
+        """
+        valid_studies = [s for s in studies if s.best_trial is not None]
+
+        if not valid_studies:
+            print("\nNo successful studies found to evaluate. Exiting.")
+            return
+
+        if self.evaluate_all_archs:
+            print("\nEvaluating the best performer from EACH model architecture...")
+            models_to_evaluate = valid_studies
+        else:
+            print("\nFinding the single best champion for each task type...")
+            regression_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
+                s.study_name.split('_')[:-1])]['type'] == 'regression']
+            classification_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
+                s.study_name.split('_')[:-1])]['type'] == 'classification']
+
+            best_regr = min(
+                regression_studies, key=lambda s: s.best_value) if regression_studies else None
+            best_class = min(
+                classification_studies, key=lambda s: s.best_value) if classification_studies else None
+            models_to_evaluate = [s for s in [
+                best_regr, best_class] if s is not None]
+
+        print("\nThe following models will be evaluated on the hold-out set:")
+        if models_to_evaluate:
+            for study in models_to_evaluate:
+                family_name = '_'.join(study.study_name.split('_')[:-1])
+                score = study.best_value
+                print(f"  - {family_name.upper()} (CV Score: {score:.4f})")
+        else:
+            print("  - No successful models found to evaluate.")
+            return
+
+        regression_results, classification_results = [], []
+
+        with ProcessPoolExecutor(max_workers=len(models_to_evaluate)) as executor:
+            future_to_study = {executor.submit(self._evaluate_single_champion, s, self.config,
+                                               self.X_train, self.y_train, self.X_test, self.y_test): s for s in models_to_evaluate}
+            progress_bar = tqdm(as_completed(future_to_study), total=len(
+                models_to_evaluate), desc="Evaluating Models")
+
+            for future in progress_bar:
+                study = future_to_study[future]
+                family_name = '_'.join(study.study_name.split('_')[:-1])
+                progress_bar.set_postfix_str(
+                    f"Completed: {family_name.upper()}")
+                try:
+                    task_type, result_row = future.result()
+                    if task_type == 'regression':
+                        regression_results.append(result_row)
+                    else:
+                        classification_results.append(result_row)
+                except Exception as exc:
+                    print(
+                        f"\nModel {family_name} generated an exception: {exc}")
+
+        print("\nFinal evaluation complete.")
+        if regression_results:
+            df = pd.DataFrame(regression_results)
+            df.to_csv(self.config.REGRESSION_RESULTS_CSV_PATH, index=False)
+            print(
+                f"Regression results saved to {self.config.REGRESSION_RESULTS_CSV_PATH}")
+        if classification_results:
+            df = pd.DataFrame(classification_results)
+            df.to_csv(self.config.CLASSIFICATION_RESULTS_CSV_PATH, index=False)
+            print(
+                f"Classification results saved to {self.config.CLASSIFICATION_RESULTS_CSV_PATH}")
+
+        if self.evaluate_all_archs:
+            all_results = pd.concat([pd.DataFrame(regression_results), pd.DataFrame(
+                classification_results)], ignore_index=True)
+            if not all_results.empty:
+                plt.figure(figsize=(10, 8))
+                order = all_results.sort_values("score_hold")["model"]
+                sns.barplot(data=all_results, y="model",
+                            x="score_hold", order=order, color="steelblue")
+                plt.xlabel("Hold-out Set Business Score (Lower is Better)")
+                plt.ylabel("Model Architecture")
+                plt.title("Final Model Performance on Hold-out Data")
+                plt.tight_layout()
+                plt.savefig(self.config.RESULTS_PLOT_PATH)
+                print(
+                    f"Comparison chart saved to {self.config.RESULTS_PLOT_PATH}")

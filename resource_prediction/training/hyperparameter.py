@@ -1,170 +1,210 @@
 import pandas as pd
 import numpy as np
-from functools import partial
-from tqdm import tqdm
+import multiprocessing
+import optuna
+from datetime import datetime
 
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.cluster import KMeans
-import xgboost
-import lightgbm
-import catboost
-
-from skopt import gp_minimize
-from skopt.utils import use_named_args
+import xgboost as xgb
+import lightgbm as lgb
+import catboost as ctb
 
 from resource_prediction.config import Config
 
 
-class BayesianOptimizer:
-    """
-    Manages the Bayesian hyperparameter optimization process.
-    """
+class QuantileEnsemblePredictor:
+    """An ensemble regressor combining GradientBoosting and XGBoost quantiles."""
 
-    def __init__(self, config: Config, X_train: pd.DataFrame, y_train: pd.DataFrame):
-        self.config = config
-        self.X = X_train
-        self.y_gb = y_train[self.config.TARGET_COLUMN_PROCESSED]
-        self.all_best_results = []
-        self.pbar_inner = None
+    def __init__(self, alpha=0.95, safety=1.05, gb_params=None, xgb_params=None):
+        self.alpha = alpha
+        self.safety = safety
+        self.gb = GradientBoostingRegressor(
+            loss="quantile", alpha=alpha, random_state=Config.RANDOM_STATE, **(gb_params or {})
+        )
+        xgb_defaults = {
+            "objective": "reg:quantileerror", "quantile_alpha": alpha,
+            "n_jobs": 1, "random_state": Config.RANDOM_STATE
+        }
+        xgb_defaults.update(xgb_params or {})
+        self.xgb = xgb.XGBRegressor(**xgb_defaults)
+        self.columns = None
 
-    def _evaluate_single_run(self, bin_edges, model_name, confidence_threshold, model_hyperparams):
-        """Trains and evaluates a model for a single set of hyperparameters using CV."""
-        if len(bin_edges) < 2:
-            return None
-        num_classes = len(bin_edges) - 1
-
-        y_binned = pd.cut(self.y_gb, bins=bin_edges, labels=range(num_classes),
-                          right=False, include_lowest=True, duplicates='drop')
-        valid_indices = y_binned.dropna().index
-        if len(valid_indices) < self.config.N_SPLITS_CV * 10:
-            return None
-
-        X_current = self.X.loc[valid_indices].reset_index(drop=True)
-        y_current = y_binned.loc[valid_indices].reset_index(
-            drop=True).astype(int)
-
-        if model_name == 'xgboost':
-            model = xgboost.XGBClassifier(
-                **model_hyperparams, random_state=self.config.RANDOM_STATE, n_jobs=-1)
-        elif model_name == 'lightgbm':
-            model = lightgbm.LGBMClassifier(
-                **model_hyperparams, random_state=self.config.RANDOM_STATE, n_jobs=-1, verbose=-1)
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """One-hot encodes categorical features and aligns columns."""
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        if fit:
+            self.columns = Xd.columns.tolist()
         else:
-            model = catboost.CatBoostClassifier(
-                **model_hyperparams, random_state=self.config.RANDOM_STATE, verbose=0, thread_count=-1)
+            missing_cols = set(self.columns) - set(Xd.columns)
+            for c in missing_cols:
+                Xd[c] = 0
+            Xd = Xd[self.columns]
+        return Xd.astype(float)
 
-        tscv = TimeSeriesSplit(n_splits=self.config.N_SPLITS_CV)
-        all_allocated_mem, all_true_mem = [], []
+    def fit(self, X, y, **fit_params):
+        """
+        Fits both underlying regressors on the training data.
 
-        for train_index, test_index in tscv.split(X_current, y_current):
-            X_train, X_test = X_current.iloc[train_index], X_current.iloc[test_index]
-            y_train, _ = y_current.iloc[train_index], y_current.iloc[test_index]
-            try:
-                model.fit(X_train, y_train)
-                y_pred_probs = model.predict_proba(X_test)
-                y_pred_base = np.argmax(y_pred_probs, axis=1)
-                y_pred_final = [min(pred + 1, num_classes - 1) if conf < confidence_threshold else pred
-                                for pred, conf in zip(y_pred_base, y_pred_probs[np.arange(len(y_pred_base)), y_pred_base])]
+        Args:
+            X (pd.DataFrame): The feature matrix.
+            y (pd.Series): The target vector.
+            **fit_params: Additional parameters passed to the fit method of
+                          the underlying XGBoost model (e.g., for verbosity).
+        """
+        Xd = self._encode(X, fit=True)
+        self.gb.fit(Xd, y)
+        self.xgb.fit(Xd, y, **fit_params)
 
-                allocated_mem_pred = np.array(
-                    [bin_edges[min(c + 1, num_classes)] for c in y_pred_final])
-                true_mem_test = self.y_gb.iloc[test_index].values
-                all_allocated_mem.extend(allocated_mem_pred)
-                all_true_mem.extend(true_mem_test)
-            except Exception:
-                continue
+    def predict(self, X):
+        """Predicts by taking the maximum of the two models and applying a safety factor."""
+        Xd = self._encode(X)
+        preds = np.maximum(self.gb.predict(Xd), self.xgb.predict(Xd))
+        return preds * self.safety
 
-        if not all_true_mem:
-            return None
 
-        allocated_arr, true_arr = np.array(
-            all_allocated_mem), np.array(all_true_mem)
-        jobs_under = np.sum(allocated_arr < true_arr)
-        over_allocation_gb = np.sum(np.maximum(0, allocated_arr - true_arr))
-        total_true_used_gb = np.sum(true_arr)
+class OptunaOptimizer:
+    """Orchestrates hyperparameter search for all model families using Optuna."""
 
+    def __init__(self, config: Config, X_train: pd.DataFrame, y_train: pd.DataFrame, task_type_filter: str | None = None):
+        self.config = config
+        self.X_train = X_train
+        self.y_train_gb = y_train[config.TARGET_COLUMN_PROCESSED]
+        self.task_type_filter = task_type_filter
+        self.config.OPTUNA_DB_DIR.mkdir(exist_ok=True)
+
+    def _get_feature_set(self, use_quant_feats: bool):
+        """Assembles the feature dataframe based on the trial parameter."""
+        features = self.config.BASE_FEATURES + \
+            (self.config.QUANT_FEATURES if use_quant_feats else [])
+        return self.X_train[list(dict.fromkeys(features))]
+
+    def _business_score(self, metrics):
+        """Calculates the business score to minimize."""
+        return metrics["under_pct"] * 5 + metrics["total_over_pct"]
+
+    def _allocation_metrics(self, allocated, true):
+        """Calculates key business metrics for memory allocation."""
+        under = np.sum(allocated < true)
+        over = np.maximum(0, allocated - true)
         return {
-            'perc_under_allocation': (jobs_under / len(true_arr)) * 100,
-            'perc_total_over_allocation': (over_allocation_gb / total_true_used_gb) * 100 if total_true_used_gb > 0 else 0,
+            "under_pct": 100 * under / len(true) if len(true) > 0 else 0,
+            "total_over_pct": 100 * over.sum() / true.sum() if true.sum() > 0 else 0,
         }
 
-    def _objective(self, model_name, **params):
-        """The objective function for skopt to minimize."""
-        self.pbar_inner.set_description(
-            f"Eval: {params['strategy']}, {params['n_bins']} bins, thr={params['confidence_threshold']:.2f}")
-        model_hyperparams = {k: v for k, v in params.items(
-        ) if k not in ['n_bins', 'strategy', 'confidence_threshold']}
-        min_val, max_val = self.y_gb.min(), self.y_gb.max()
+    def _evaluate_regression(self, model, X, y):
+        """Evaluates a regression model using time-series cross-validation."""
+        X_encoded = pd.get_dummies(
+            X, drop_first=True, dummy_na=False).astype(float)
 
-        if params['strategy'] == 'quantile':
-            _, bin_edges = pd.qcut(
-                self.y_gb, q=params['n_bins'], retbins=True, duplicates='drop')
-        elif params['strategy'] == 'uniform':
-            bin_edges = np.linspace(min_val, max_val, params['n_bins'] + 1)
-        else:  # kmeans
-            kmeans = KMeans(n_clusters=params['n_bins'], random_state=self.config.RANDOM_STATE, n_init='auto').fit(
-                self.y_gb.values.reshape(-1, 1))
-            centers = sorted(kmeans.cluster_centers_.flatten())
-            edges = [(centers[i] + centers[i+1]) /
-                     2 for i in range(len(centers)-1)]
-            bin_edges = np.array([min_val] + edges + [max_val])
-        bin_edges = sorted(list(set(bin_edges)))
+        tscv = TimeSeriesSplit(self.config.CV_SPLITS)
+        allocs, truths = [], []
+        for tr_idx, te_idx in tscv.split(X_encoded):
+            model.fit(X_encoded.iloc[tr_idx], y.iloc[tr_idx])
+            allocs.extend(model.predict(X_encoded.iloc[te_idx]))
+            truths.extend(y.iloc[te_idx])
+        metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
+        return self._business_score(metrics)
 
-        results = self._evaluate_single_run(
-            bin_edges, model_name, params['confidence_threshold'], model_hyperparams)
-        if results is None:
-            return 1e6
+    def _evaluate_classification(self, model, X, y):
+        """Evaluates a classification model using time-series cross-validation."""
+        _, bin_edges = pd.qcut(y, q=15, retbins=True, duplicates='drop')
+        y_binned = pd.cut(y, bins=bin_edges, labels=False,
+                          include_lowest=True, right=True)
+        X_encoded = pd.get_dummies(
+            X, drop_first=True, dummy_na=False).astype(float)
 
-        under_alloc_penalty = 20.0
-        score = (results['perc_under_allocation'] *
-                 under_alloc_penalty) + results['perc_total_over_allocation']
-        return score
+        tscv = TimeSeriesSplit(self.config.CV_SPLITS)
+        allocs, truths = [], []
+        for tr_idx, te_idx in tscv.split(X_encoded):
+            model.fit(X_encoded.iloc[tr_idx], y_binned.iloc[tr_idx])
+            pred_class = model.predict(X_encoded.iloc[te_idx]).astype(int)
+            allocs.extend(bin_edges[np.minimum(
+                pred_class + 1, len(bin_edges) - 1)])
+            truths.extend(y.iloc[te_idx])
+        metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
+        return self._business_score(metrics)
 
-    def _save_summary(self):
-        """Analyzes and saves the best result to a CSV."""
-        print("\n--- Optimization Complete - Determining Best Model ---")
-        if not self.all_best_results:
-            print("No models were successfully optimized.")
-            return
+    def _objective(self, trial, base_model, model_type):
+        """The core objective function for Optuna to minimize."""
+        params = self.config.get_search_space(trial, base_model, model_type)
+        X_trial = self._get_feature_set(params.pop("use_quant_feats"))
+        model = None
 
-        overall_best = sorted(self.all_best_results,
-                              key=lambda x: x['score'])[0]
-        print(
-            f"\n--> Overall Best Model: {overall_best['model_name'].upper()}")
-        print(f"--> Best Score (lower is better): {overall_best['score']:.4f}")
+        if model_type == "regression":
+            if base_model == 'quantile_ensemble':
+                gb_params = {'n_estimators': params["gb_n_estimators"],
+                             'max_depth': params["gb_max_depth"], 'learning_rate': params["gb_lr"]}
+                xgb_params = {'n_estimators': params["xgb_n_estimators"],
+                              'max_depth': params["xgb_max_depth"], 'learning_rate': params["xgb_lr"]}
+                model = QuantileEnsemblePredictor(
+                    alpha=params["alpha"], safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params)
+            elif base_model == 'xgboost':
+                model = xgb.XGBRegressor(
+                    **params, objective='reg:squarederror', n_jobs=1, random_state=self.config.RANDOM_STATE)
+            elif base_model == 'random_forest':
+                model = RandomForestRegressor(
+                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+            if model is None:
+                raise ValueError(f"Unknown regression model: {base_model}")
+            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+        else:  # Classification
+            if 'lr' in params:
+                params['learning_rate'] = params.pop('lr')
 
-        self.config.OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
-        summary_df = pd.DataFrame([{
-            'model_name': overall_best['model_name'],
-            'best_params_from_grid': str(overall_best['params']),
-            'optimization_score': overall_best['score']
-        }])
-        summary_df.to_csv(self.config.OPTIMIZATION_SUMMARY_PATH, index=False)
-        print(
-            f"\nOptimization summary saved to: {self.config.OPTIMIZATION_SUMMARY_PATH.resolve()}")
+            if base_model == 'xgboost':
+                model = xgb.XGBClassifier(
+                    **params, objective="multi:softmax", n_jobs=1, random_state=self.config.RANDOM_STATE)
+            elif base_model == 'lightgbm':
+                model = lgb.LGBMClassifier(
+                    **params, objective="multiclass", n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
+            elif base_model == 'catboost':
+                model = ctb.CatBoostClassifier(**params, loss_function="MultiClass", thread_count=1,
+                                               random_state=self.config.RANDOM_STATE, verbose=0, allow_writing_files=False)
+            elif base_model == 'random_forest':
+                model = RandomForestClassifier(
+                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+            elif base_model == 'logistic_regression':
+                model = LogisticRegression(
+                    **params, max_iter=1000, n_jobs=1, random_state=self.config.RANDOM_STATE, multi_class="auto")
+            if model is None:
+                raise ValueError(f"Unknown classification model: {base_model}")
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
 
     def run(self):
-        """Main method to run the entire optimization process for all configured models."""
-        for model_name in self.config.MODELS_TO_OPTIMIZE:
-            print(f"\n{'='*20} Optimizing for: {model_name.upper()} {'='*20}")
-            space = self.config.SEARCH_SPACES[model_name]
-            objective_for_model = partial(
-                self._objective, model_name=model_name)
-            self.pbar_inner = tqdm(
-                total=self.config.N_OPTIMIZATION_CALLS_PER_MODEL, desc=f"Optimizing {model_name}")
+        """Runs the complete Optuna optimization for all configured model families."""
+        all_studies = []
+        for family_name, metadata in self.config.MODEL_FAMILIES.items():
+            if self.task_type_filter and metadata['type'] != self.task_type_filter:
+                continue
 
-            def pbar_callback(res):
-                self.pbar_inner.update(1)
-                self.pbar_inner.set_postfix_str(f"Best Score: {res.fun:.4f}")
+            storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"
+            study_name = f"{family_name}_{datetime.now().strftime('%Y%m%d')}"
 
-            result = gp_minimize(func=use_named_args(space)(objective_for_model), dimensions=space,
-                                 n_calls=self.config.N_OPTIMIZATION_CALLS_PER_MODEL,
-                                 random_state=self.config.RANDOM_STATE, n_jobs=-1, callback=[pbar_callback])
-            self.pbar_inner.close()
+            try:
+                study = optuna.load_study(
+                    study_name=study_name, storage=storage_url)
+                print(
+                    f"Resuming study '{study_name}' for model family '{family_name}'.")
+            except KeyError:
+                study = optuna.create_study(study_name=study_name, storage=storage_url, direction="minimize",
+                                            sampler=optuna.samplers.TPESampler(seed=self.config.RANDOM_STATE))
+                print(
+                    f"Creating new study '{study_name}' for model family '{family_name}'.")
 
-            best_params = {space[i].name: result.x[i]
-                           for i in range(len(space))}
-            self.all_best_results.append(
-                {'model_name': model_name, 'score': result.fun, 'params': best_params})
+            n_workers = self.config.NUM_PARALLEL_WORKERS or max(
+                1, multiprocessing.cpu_count() // 2)
+            remaining_trials = self.config.N_CALLS_PER_FAMILY - \
+                len(study.trials)
 
-        self._save_summary()
+            if remaining_trials > 0:
+                print(
+                    f"Optimising {family_name.upper()} – running {remaining_trials} more trials with {n_workers} workers")
+                study.optimize(lambda trial: self._objective(
+                    trial, metadata['base_model'], metadata['type']), n_trials=remaining_trials, n_jobs=n_workers, show_progress_bar=True)
+            else:
+                print(
+                    f"Skipping {family_name.upper()} – already optimised ({len(study.trials)} trials)")
+            all_studies.append(study)
+        return all_studies
