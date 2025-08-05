@@ -3,7 +3,7 @@
 # You can set these variables from the command line, and also
 # from the environment for the first two.
 SPHINXOPTS    ?=
-SPHINXBUILD  ?= .venv/bin/python -m sphinx
+SPHINXBUILD  ?= poetry run python -m sphinx
 SOURCEDIR    = docs
 BUILDDIR     = docs/_build
 
