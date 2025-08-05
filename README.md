@@ -36,15 +36,27 @@ poetry run python --version
 
 ### Documentation
 
-Full project documentation is available in the `docs/` directory. To
-generate the HTML site locally:
+Full project documentation is available in the `docs/` directory. To build and view the documentation locally:
 
 ```console
-poetry shell
-sphinx-build -b html docs docs/_build/html
+# Build the documentation
+make html
+
+# Build and serve the documentation (auto-opens in browser)
+make serve
+
+# For development: clean, build, and serve
+make dev
 ```
 
-Then open `docs/_build/html/index.html` in your browser.
+The documentation will be available at `http://localhost:8000` and should automatically open in your browser.
+
+**Alternative manual commands:**
+```console
+# If you prefer manual commands
+poetry run sphinx-build -b html docs docs/_build/html
+poetry run python serve_docs.py
+```
 
 ## Imagined "how to use" workflow
 

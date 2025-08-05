@@ -16,6 +16,17 @@ under-allocation failures and memory waste.
 - Poetry-based dependency management
 - Comprehensive evaluation and reporting
 
+Quick Start
+-----------
+
+To get started with this project:
+
+1. **Install dependencies**: ``poetry install --with dev``
+2. **Build documentation**: ``make html`` or ``make serve``
+3. **Run the pipeline**: ``python main.py --run-search``
+
+For detailed setup instructions, see the :doc:`usage` guide.
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:

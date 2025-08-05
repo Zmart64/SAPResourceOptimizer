@@ -38,6 +38,26 @@ Poetry is used for dependency management and virtual environment handling. If yo
    # Verify Python version in the activated environment
    python --version
 
+**Building Documentation**
+
+This project uses Sphinx for documentation generation. After installing dependencies, you can build and view the documentation locally:
+
+.. code-block:: console
+
+   # Build HTML documentation
+   make html
+
+   # Build and serve documentation (opens browser automatically)
+   make serve
+
+   # Development workflow: clean, build, and serve
+   make dev
+
+   # Clean build directory
+   make clean
+
+The documentation will be served at ``http://localhost:8000`` and should automatically open in your browser. Press ``Ctrl+C`` to stop the documentation server.
+
 Training Pipeline Overview
 --------------------------
 
