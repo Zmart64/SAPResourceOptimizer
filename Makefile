@@ -27,7 +27,7 @@ clean:
 # Serve the documentation locally
 serve: html
 	@echo "Starting documentation server..."
-	@.venv/bin/python serve_docs.py
+	@poetry run python serve_docs.py
 
 # Install documentation dependencies
 install-docs:
