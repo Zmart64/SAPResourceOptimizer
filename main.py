@@ -1,3 +1,5 @@
+"""Command-line interface for the resource prediction pipeline."""
+
 import argparse
 import os
 import sys
