@@ -23,9 +23,6 @@ optuna = "^3.5.0"
 [tool.poetry.dev-dependencies]
 sphinx = "^7.0.0"
 
-[tool.poetry.extras]
-dev = ["sphinx"]
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
