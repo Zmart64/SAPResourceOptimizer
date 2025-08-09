@@ -1,6 +1,7 @@
 .DS_Store
 /data/processed
 __pycache__
+/NodeMetricsUnpacked
 
 # Sphinx documentation
 docs/_build/
