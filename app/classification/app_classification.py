@@ -17,11 +17,13 @@ warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 def run_classification(MODEL_PAYLOAD_PATH):
+    """Runs the app for the classification model"""
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     SUMMARY_FILE = os.path.join(SCRIPT_DIR, 'best_strategy_summary_xgboost_10.csv')
     FULL_FILE = os.path.join(SCRIPT_DIR, "test_F_and_y.csv")
     TEST_FILE = os.path.join(SCRIPT_DIR, "test_X.csv")
 
+    # Load the metadata
     try:
         summary_df = pd.read_csv(SUMMARY_FILE)
         best_info = summary_df.iloc[0]
@@ -57,6 +59,7 @@ def run_classification(MODEL_PAYLOAD_PATH):
         preds.append(pred)
     simulation_df['predicted_class'] = preds
 
+    # Streamlit setup
     delay_seconds = setup_sidebar("XGBoost Classification", BIN_EDGES_GB)
     summary_ph, output_ph, chart_ph = setup_ui(st.session_state.model_type)
 

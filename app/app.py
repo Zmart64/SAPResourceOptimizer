@@ -22,9 +22,11 @@ from classification.app_classification import run_classification
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 
 def run_qe(MODEL_PAYLOAD_PATH):
+    """Runs the app for the selected quantile ensemble model"""
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     SIMULATION_DATA = os.path.join(SCRIPT_DIR, "qe/simulation_data.csv")
 
+    # Load the model 
     try:
         model_path = os.path.join(SCRIPT_DIR, MODEL_PAYLOAD_PATH)
         model = joblib.load(model_path)
@@ -32,6 +34,7 @@ def run_qe(MODEL_PAYLOAD_PATH):
         st.error(f"FATAL: Could not load model. Error: {e}")
         st.stop()
 
+    # Load the simulation data
     try:
         simulation_df = pd.read_csv(SIMULATION_DATA, delimiter=";")
         for col in ["bp_arch", "bp_compiler", "bp_opt", "component", "makeType",
@@ -44,6 +47,7 @@ def run_qe(MODEL_PAYLOAD_PATH):
 
     predictions = model.predict(simulation_df)
 
+    # Streamlit setup
     delay_seconds = setup_sidebar("Quantile Ensemble")
     summary_ph, output_ph, chart_ph = setup_ui(st.session_state.model_type)
 
@@ -60,18 +64,18 @@ def run_qe(MODEL_PAYLOAD_PATH):
                         show_class=False)
 
 
+# Define the models the user can choose from 
 INITIAL_APPROACH = "Initial Approach - Classification"
 CLASSIFICATION = "Classification"
 QE_BALANCED = "Quantile-Ensemble - Balanced Approach"
 QE_TINY_UNDER_ALLOC = "Quantile-Ensemble - Tiny Under Allocation"
 QE_SMALL_WASTE = "Quantile-Ensemble - Small Memory Waste"
 
-# --- 1. Load Model and All Necessary Metadata ---
 st.set_page_config(layout="wide")
 
 # Initialize session state with default model
 if "model_type" not in st.session_state:
-    st.session_state.model_type = "Regression"
+    st.session_state.model_type = INITIAL_APPROACH
 
 # Sidebar model selector
 st.sidebar.header("Model Selection")
@@ -83,7 +87,7 @@ if model_choice != st.session_state.model_type:
     st.session_state.model_type = model_choice
     st.rerun()
 
-# --- Configuration ---
+# Configuration 
 MODEL_PATHS = {
     INITIAL_APPROACH: "initial_approach/final_model.pkl",
     CLASSIFICATION: "classification/xgboost_uncertainty_model.pkl",
@@ -94,6 +98,7 @@ MODEL_PATHS = {
 
 MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "initial_approach/final_model.pkl")
 
+# Depending on the model run the required function
 if st.session_state.model_type == INITIAL_APPROACH:
     SIMULATION_DATA_PATH = "initial_approach/simulation_data.csv"
     run_regression(MODEL_PAYLOAD_PATH, SIMULATION_DATA_PATH)

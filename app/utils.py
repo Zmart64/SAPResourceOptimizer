@@ -7,6 +7,9 @@ import streamlit as st
 from collections import deque
 
 def setup_sidebar(model_type, bin_edges_gb=None):
+    """
+    Sets up the Streamlit sidebar controls and displays model metadata.
+    """
     st.sidebar.header("Simulation Controls")
     delay_seconds = st.sidebar.slider("Delay between steps (seconds)", 0.0, 2.0, 0.1)
     st.sidebar.subheader("Loaded Model Info")
@@ -17,6 +20,9 @@ def setup_sidebar(model_type, bin_edges_gb=None):
     return delay_seconds
 
 def setup_ui(model_type):
+    """
+    Sets up the main Streamlit UI for the simulation view.
+    """
     st.title(f"Real-time Allocation Simulator ({model_type})")
     st.subheader("Overall Simulation Summary")
     summary_placeholder = st.empty()
@@ -25,6 +31,9 @@ def setup_ui(model_type):
     return summary_placeholder, col1.empty(), col2.empty()
 
 def update_summary(placeholder, total_jobs, jobs_under, total_under, total_over, total_alloc, total_actual, total_saved):
+    """
+    Updates the summary metrics section with the latest cumulative simulation results.
+    """
     with placeholder.container():
         cols = st.columns(6)
         under_pct = (jobs_under / total_jobs) * 100 if total_jobs else 0
@@ -37,6 +46,9 @@ def update_summary(placeholder, total_jobs, jobs_under, total_under, total_over,
         cols[5].metric(f"Total Saved Memory", f"{total_saved:.2f} GB")
 
 def update_output(placeholder, timestamp, predicted_class, allocated_mem_gb, actual_gb, diff_gb, show_class=True):
+    """
+    Updates the live job details section with current prediction and memory usage info.
+    """
     with placeholder.container():
         st.markdown(f"**Timestamp:** `{timestamp}`")
         if show_class and predicted_class is not None:
@@ -46,6 +58,9 @@ def update_output(placeholder, timestamp, predicted_class, allocated_mem_gb, act
         st.caption("Delta shows (Allocated - Actual). Negative is under-allocation.")
 
 def update_chart(placeholder, results):
+    """
+    Renders or updates the line chart comparing allocated vs. actual memory usage.
+    """
     with placeholder.container():
         plot_df = pd.DataFrame(results)
         melted_df = plot_df.melt(id_vars="Time", var_name="Series", value_name="Memory (GB)")
@@ -62,6 +77,9 @@ def update_chart(placeholder, results):
 def run_simulation_loop(simulation_df, predict_fn, actual_col, memreq_col,
                         summary_placeholder, output_placeholder, chart_placeholder, delay_seconds,
                         show_class=True):
+    """
+    Runs the main simulation loop, processing each job row-by-row and updating the UI.
+    """
     window_size = 30
     results = {"Time": deque(maxlen=window_size),
                "Allocated Memory (GB)": deque(maxlen=window_size),

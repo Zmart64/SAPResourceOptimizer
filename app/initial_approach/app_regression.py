@@ -23,16 +23,19 @@ def load_model_payload(model_path):
         return None
 
 def run_regression(MODEL_PAYLOAD_PATH, SIMULATION_DATA_PATH):
+    """Runs the app for the regression model"""
     payload = load_model_payload(MODEL_PAYLOAD_PATH)
     if not payload:
         st.stop()
 
+    # Load the metadata
     model = payload['model']
     model_name = payload['model_name']
     bin_edges_gb = payload['bin_edges_gb']
     features = payload['feature_columns']
     requires_one_hot = payload['requires_one_hot']
 
+    # Load the simulation file
     try:
         df = pd.read_csv(SIMULATION_DATA_PATH, delimiter=";")
         df['time'] = pd.to_datetime(df['time'])
@@ -45,6 +48,7 @@ def run_regression(MODEL_PAYLOAD_PATH, SIMULATION_DATA_PATH):
         st.error(f"FATAL: Simulation data not found: '{SIMULATION_DATA_PATH}'")
         st.stop()
 
+    # Streamlit setup
     delay_seconds = setup_sidebar(model_name, bin_edges_gb)
     summary_ph, output_ph, chart_ph = setup_ui(st.session_state.model_type)
 
