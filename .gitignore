@@ -1,5 +1,6 @@
 .DS_Store
 /data/processed
+/data/raw/build-data-4.csv
 __pycache__
 /NodeMetricsUnpacked
 

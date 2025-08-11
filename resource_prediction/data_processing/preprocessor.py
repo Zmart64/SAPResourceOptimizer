@@ -34,12 +34,22 @@ class DataPreprocessor:
         Executes the full preprocessing pipeline: loading, feature engineering,
         splitting, and saving data artifacts.
         """
-        print("Starting unified preprocessing and data splitting...")
+        print("Starting data preprocessing...")
 
         print("Step 1: Loading and preparing raw data")
         df = pd.read_csv(self.config.RAW_DATA_PATH, sep=";")
-        df['time'] = pd.to_datetime(df['time'], format='mixed')
+
+        # Robustly parse and sort by time
+        df['time'] = pd.to_datetime(
+            df['time'], format='mixed', errors='coerce')
+        if df['time'].isnull().any():
+            print(
+                f"Warning: Found and removed {df['time'].isnull().sum()} rows with invalid timestamps.")
+            df.dropna(subset=['time'], inplace=True)
+
         df = df.sort_values('time').reset_index(drop=True)
+
+        # Clean and create target variable
         df[self.config.TARGET_COLUMN_RAW] = pd.to_numeric(
             df[self.config.TARGET_COLUMN_RAW], errors='coerce')
         df.dropna(subset=[self.config.TARGET_COLUMN_RAW], inplace=True)
@@ -54,12 +64,12 @@ class DataPreprocessor:
         F["ts_dow"] = F["time"].dt.dayofweek
         F["ts_hour"] = F["time"].dt.hour
         F["ts_dayofyear"] = F["time"].dt.dayofyear
-        F["ts_weekofyear"] = F["time"].dt.isocalendar().week
+        F["ts_weekofyear"] = F["time"].dt.isocalendar().week.astype('int')
 
         F[["bp_arch", "bp_compiler", "bp_opt"]] = F["buildProfile"].apply(
             self._split_build_profile).tolist()
         F["branch_id_str"] = pd.to_numeric(F["branch"].str.extract(
-            r"(\d+)$")[0], errors="coerce").fillna(-1)
+            r"(\d+)$")[0], errors="coerce").fillna(-1).astype(int)
         F["branch_prefix"] = F["branch"].str.replace(
             r"[\d_]*$", "", regex=True).replace('', 'unknown_prefix')
 
@@ -87,9 +97,13 @@ class DataPreprocessor:
         F["lag_max_rss_global_w5"] = F["max_rss_gb"].shift(
             1).rolling(5, 1).mean()
 
-        for col in F.select_dtypes("number").columns:
-            if F[col].isnull().any():
-                F[col] = F[col].fillna(F[col].median())
+        # Check for any remaining NaN values after feature engineering and fill them
+        for col in self.config.ALL_FEATURES:
+            if col in F.columns and F[col].isnull().any():
+                if pd.api.types.is_numeric_dtype(F[col]):
+                    F[col] = F[col].fillna(F[col].median())
+                else:
+                    F[col] = F[col].fillna("unknown")
 
         X = F[self.config.ALL_FEATURES].copy()
         y = F[[self.config.TARGET_COLUMN_PROCESSED,
@@ -101,11 +115,11 @@ class DataPreprocessor:
         X_train, y_train = X.iloc[:split_index], y.iloc[:split_index]
         X_test, y_test = X.iloc[split_index:], y.iloc[split_index:]
 
+        print(
+            f"Saving processed data splits to '{self.config.PROCESSED_DATA_DIR.resolve()}'")
         self.config.PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
         X_train.to_pickle(self.config.X_TRAIN_PATH)
         y_train.to_pickle(self.config.Y_TRAIN_PATH)
         X_test.to_pickle(self.config.X_TEST_PATH)
         y_test.to_pickle(self.config.Y_TEST_PATH)
-        print(
-            f"Train/Test data successfully saved to '{self.config.PROCESSED_DATA_DIR.resolve()}'")
-        print("Preprocessing and splitting complete.")
+        print("Preprocessing complete.")

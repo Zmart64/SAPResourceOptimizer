@@ -12,7 +12,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.cluster import KMeans
 import xgboost as xgb
 import lightgbm as lgb
-import catboost as ctb
 
 from resource_prediction.config import Config
 from resource_prediction.training.hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
@@ -151,7 +150,8 @@ class Trainer:
                 edges = [(centers[i] + centers[i+1]) /
                          2 for i in range(len(centers)-1)]
                 bin_edges = np.array([min_val] + edges + [max_val])
-            bin_edges = sorted(list(set(bin_edges)))
+
+            bin_edges = np.array(sorted(list(set(bin_edges))))
 
             y_train_binned = pd.cut(
                 y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
@@ -169,9 +169,6 @@ class Trainer:
             elif metadata['base_model'] == 'lightgbm':
                 model = lgb.LGBMClassifier(**best_params, objective="multiclass",
                                            n_jobs=-1, random_state=config.RANDOM_STATE, verbose=-1, verbosity=-1)
-            elif metadata['base_model'] == 'catboost':
-                model = ctb.CatBoostClassifier(**best_params, loss_function="MultiClass", thread_count=-1,
-                                               random_state=config.RANDOM_STATE, verbose=0, allow_writing_files=False)
             elif metadata['base_model'] == 'random_forest':
                 model = RandomForestClassifier(
                     **best_params, n_jobs=-1, random_state=config.RANDOM_STATE, verbose=0)
@@ -192,31 +189,47 @@ class Trainer:
 
     def _evaluate_and_report(self, studies):
         """
-        Finds models to evaluate based on the `evaluate_all_archs` flag,
-        evaluates them in parallel, and generates reports.
+        Finds models to evaluate based on the `evaluate_all_archs` and `task_type_filter`
+        flags, evaluates them in parallel, and generates reports.
         """
-        valid_studies = [s for s in studies if s.best_trial is not None]
+        valid_studies = []
+        for s in studies:
+            try:
+                if s.best_trial:
+                    valid_studies.append(s)
+            except ValueError:
+                family_name = '_'.join(s.study_name.split('_')[:-1])
+                print(
+                    f"Warning: Study for '{family_name}' has no successful trials and will be skipped.")
+                continue
 
         if not valid_studies:
             print("\nNo successful studies found to evaluate. Exiting.")
             return
 
+        regression_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
+            s.study_name.split('_')[:-1])]['type'] == 'regression']
+        classification_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
+            s.study_name.split('_')[:-1])]['type'] == 'classification']
+
+        models_to_evaluate = []
         if self.evaluate_all_archs:
             print("\nEvaluating the best performer from EACH model architecture...")
-            models_to_evaluate = valid_studies
+            if self.task_type_filter == 'regression':
+                models_to_evaluate.extend(regression_studies)
+            elif self.task_type_filter == 'classification':
+                models_to_evaluate.extend(classification_studies)
+            else:
+                models_to_evaluate.extend(valid_studies)
         else:
             print("\nFinding the single best champion for each task type...")
-            regression_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
-                s.study_name.split('_')[:-1])]['type'] == 'regression']
-            classification_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
-                s.study_name.split('_')[:-1])]['type'] == 'classification']
-
-            best_regr = min(
-                regression_studies, key=lambda s: s.best_value) if regression_studies else None
-            best_class = min(
-                classification_studies, key=lambda s: s.best_value) if classification_studies else None
-            models_to_evaluate = [s for s in [
-                best_regr, best_class] if s is not None]
+            if self.task_type_filter != 'classification' and regression_studies:
+                best_regr = min(regression_studies, key=lambda s: s.best_value)
+                models_to_evaluate.append(best_regr)
+            if self.task_type_filter != 'regression' and classification_studies:
+                best_class = min(classification_studies,
+                                 key=lambda s: s.best_value)
+                models_to_evaluate.append(best_class)
 
         print("\nThe following models will be evaluated on the hold-out set:")
         if models_to_evaluate:
@@ -231,7 +244,8 @@ class Trainer:
         print("\nSubmitting model evaluation tasks to be run in parallel...")
         regression_results, classification_results = [], []
 
-        with ProcessPoolExecutor(max_workers=len(models_to_evaluate)) as executor:
+        max_workers = len(models_to_evaluate) if models_to_evaluate else 1
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_to_study = {executor.submit(self._evaluate_single_champion, s, self.config,
                                                self.X_train, self.y_train, self.X_test, self.y_test): s for s in models_to_evaluate}
             progress_bar = tqdm(as_completed(future_to_study), total=len(
@@ -268,9 +282,8 @@ class Trainer:
             all_results = pd.concat([pd.DataFrame(regression_results), pd.DataFrame(
                 classification_results)], ignore_index=True)
             if not all_results.empty:
-                # To catch optimization issues that produce large outliers
                 use_log_scale = False
-                if all_results['score_hold'].max() > 10 * all_results['score_hold'].median():
+                if len(all_results) > 1 and all_results['score_hold'].max() > 10 * all_results['score_hold'].median():
                     print(
                         "Warning: A large outlier was detected in the scores. Using a logarithmic scale for better visualization.")
                     use_log_scale = True

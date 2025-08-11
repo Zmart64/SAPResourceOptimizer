@@ -15,7 +15,7 @@ class Config:
     DATA_DIR = PROJECT_ROOT / "data"
     OUTPUT_DIR = PROJECT_ROOT / "output"
 
-    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-sorted.csv"
+    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-4.csv"
     PROCESSED_DATA_DIR = DATA_DIR / "processed"
     X_TRAIN_PATH = PROCESSED_DATA_DIR / "X_train.pkl"
     Y_TRAIN_PATH = PROCESSED_DATA_DIR / "y_train.pkl"
@@ -45,18 +45,17 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 120
+    N_CALLS_PER_FAMILY = 1
     NUM_PARALLEL_WORKERS = None
 
     MODEL_FAMILIES = {
-        "quantile_ensemble":     {"type": "regression", "base_model": "quantile_ensemble"},
+        "qe_regression":     {"type": "regression", "base_model": "quantile_ensemble"},
         "xgboost_classification": {"type": "classification", "base_model": "xgboost"},
         "xgboost_regression":    {"type": "regression", "base_model": "xgboost"},
         "lightgbm_classification": {"type": "classification", "base_model": "lightgbm"},
-        "catboost_classification": {"type": "classification", "base_model": "catboost"},
         "rf_classification":     {"type": "classification", "base_model": "random_forest"},
         "rf_regression":         {"type": "regression", "base_model": "random_forest"},
-        "logistic_regression":   {"type": "classification", "base_model": "logistic_regression"},
+        "logistic_regression":   {"type": "regression", "base_model": "logistic_regression"},
     }
 
     @staticmethod
@@ -110,17 +109,14 @@ class Config:
                 "use_quant_feats": use_quant
             }
 
-            if base_model in ['xgboost', 'lightgbm', 'catboost']:
+            if base_model in ['xgboost', 'lightgbm']:
                 lr = trial.suggest_float("lr", 0.01, 0.2, log=True)
                 if base_model == 'xgboost':
                     model_params = {"n_estimators": trial.suggest_int(
                         "n_estimators", 200, 800), "max_depth": trial.suggest_int("max_depth", 4, 10), "lr": lr}
-                elif base_model == 'lightgbm':
+                else:  # lightgbm
                     model_params = {"n_estimators": trial.suggest_int("n_estimators", 200, 800), "max_depth": trial.suggest_int(
                         "max_depth", 4, 10), "num_leaves": trial.suggest_int("num_leaves", 20, 64), "lr": lr}
-                else:  # catboost
-                    model_params = {"iterations": trial.suggest_int(
-                        "iterations", 200, 800), "depth": trial.suggest_int("depth", 4, 10), "lr": lr}
                 return {**common_params, **model_params}
 
             if base_model == 'random_forest':

@@ -12,7 +12,6 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.cluster import KMeans
 import xgboost as xgb
 import lightgbm as lgb
-import catboost as ctb
 
 from resource_prediction.config import Config
 
@@ -121,9 +120,9 @@ class OptunaOptimizer:
                      2 for i in range(len(centers)-1)]
             bin_edges = np.array([min_val] + edges + [max_val])
 
-        bin_edges = sorted(list(set(bin_edges)))
+        bin_edges = np.array(sorted(list(set(bin_edges))))
         if len(bin_edges) < 2:
-            return 1e9  # Return a high score if binning fails
+            return 1e9
 
         y_binned = pd.cut(y, bins=bin_edges, labels=False,
                           include_lowest=True, right=True)
@@ -176,9 +175,6 @@ class OptunaOptimizer:
             elif base_model == 'lightgbm':
                 model = lgb.LGBMClassifier(
                     **params, objective="multiclass", n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
-            elif base_model == 'catboost':
-                model = ctb.CatBoostClassifier(**params, loss_function="MultiClass", thread_count=1,
-                                               random_state=self.config.RANDOM_STATE, verbose=0, allow_writing_files=False)
             elif base_model == 'random_forest':
                 model = RandomForestClassifier(
                     **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
