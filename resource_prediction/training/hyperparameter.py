@@ -180,7 +180,7 @@ class OptunaOptimizer:
                     **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
             elif base_model == 'lightgbm':
                 model = lgb.LGBMRegressor(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
 
             if model is None:
                 raise ValueError(f"Unknown regression model: {base_model}")

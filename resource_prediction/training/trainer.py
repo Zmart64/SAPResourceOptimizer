@@ -10,7 +10,7 @@ from tqdm import tqdm
 from pathlib import Path
 import joblib
 
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.cluster import KMeans
 import xgboost as xgb
@@ -78,6 +78,18 @@ class Trainer:
             print("Error: Processed data not found. Please run preprocessing first.")
             return None, None, None, None
 
+    def _get_family_name_from_study(self, study) -> str:
+        """
+        Robustly extracts the base family name from a study object, handling both
+        clean names ('xgboost_regression') and legacy timestamped names
+        ('xgboost_regression_20250812').
+        """
+        for family_key in self.config.MODEL_FAMILIES:
+            if study.study_name.startswith(family_key):
+                return family_key
+        raise ValueError(
+            f"Could not determine family name for study '{study.study_name}'")
+
     def run_optimization_and_evaluation(self):
         """
         Runs hyperparameter search, evaluates all found architectures, and updates
@@ -130,8 +142,8 @@ class Trainer:
 
         mock_studies = []
         for _, row in all_results_df.iterrows():
-            family_name, task_type = row['model'], self.config.MODEL_FAMILIES[row['model']]['type']
-            study_name, cv_score = f"{family_name}_{task_type}", row['score_cv']
+            family_name = row['model']
+            cv_score = row['score_cv']
             param_cols = [c for c in all_results_df.columns if c not in [
                 'model', 'score_cv'] and not c.endswith('_hold')]
             params = row[param_cols].to_dict()
@@ -143,10 +155,8 @@ class Trainer:
                 if str(value).lower() in ['true', 'false']:
                     params[key] = str(value).lower() == 'true'
             mock_studies.append(
-                MockStudy(study_name, MockTrial(params, cv_score)))
+                MockStudy(family_name, MockTrial(params, cv_score)))
 
-        # The evaluation itself does not save any new champion files.
-        # It respects the user's --evaluate-all-archs flag for this specific run.
         self._evaluate_and_report(
             mock_studies, force_evaluate_all=self.evaluate_all_archs)
 
@@ -162,7 +172,6 @@ class Trainer:
         else:
             combined_df = new_results_df
 
-        # Group by model and find the index of the best (lowest) CV score
         best_indices = combined_df.groupby('model')['score_cv'].idxmin()
         final_df = combined_df.loc[best_indices].sort_values(
             'model').reset_index(drop=True)
@@ -182,13 +191,12 @@ class Trainer:
         """Calculates the business score from a metrics dictionary."""
         return metrics["under_pct"] * 5 + metrics["total_over_pct"]
 
-    @staticmethod
-    def _evaluate_single_champion(study, config, X_train, y_train, X_test, y_test, save_model: bool):
+    def _evaluate_single_champion(self, study, config, X_train, y_train, X_test, y_test, save_model: bool):
         """
         Fits, evaluates, and computes allocation stats for a single model.
         This function is designed to be run in a separate process.
         """
-        family_name = '_'.join(study.study_name.split('_')[:-1])
+        family_name = self._get_family_name_from_study(study)
         metadata = config.MODEL_FAMILIES[family_name]
         task_type, base_model_name = metadata['type'], metadata['base_model']
         best_params = study.best_trial.params.copy()
@@ -221,24 +229,17 @@ class Trainer:
                               'max_depth': best_params["xgb_max_depth"], 'learning_rate': best_params["xgb_lr"]}
                 model = QuantileEnsemblePredictor(
                     alpha=alpha, safety=best_params["safety"], gb_params=gb_params, xgb_params=xgb_params)
-
             elif base_model_name == 'xgboost':
                 model = xgb.XGBRegressor(
                     **best_params, random_state=config.RANDOM_STATE)
-
             elif base_model_name == 'lightgbm':
                 model = lgb.LGBMRegressor(
-                    **best_params, random_state=config.RANDOM_STATE)
+                    **best_params, random_state=config.RANDOM_STATE, verbose=-1)
 
-            model.fit(X_train_fs, y_train_gb)
-            alloc = model.predict(X_test_fs)
-
-            if base_model_name != 'random_forest':  # RF is handled separately
+            if base_model_name != 'random_forest':
                 model.fit(X_train_fs, y_train_gb)
                 alloc = model.predict(X_test_fs)
-
         elif task_type == 'classification':
-            # This logic remains completely unchanged
             n_bins, strategy = best_params.pop(
                 "n_bins"), best_params.pop("strategy")
             if 'lr' in best_params:
@@ -263,10 +264,16 @@ class Trainer:
             bin_edges = np.array(sorted(list(set(bin_edges))))
             y_train_binned = pd.cut(
                 y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
-            model_class = {'xgboost': xgb.XGBClassifier, 'lightgbm': lgb.LGBMClassifier,
-                           'random_forest': RandomForestClassifier, 'logistic_regression': LogisticRegression}[base_model_name]
-            model = model_class(
-                **best_params, random_state=config.RANDOM_STATE)
+
+            if base_model_name == 'lightgbm':
+                model = lgb.LGBMClassifier(
+                    **best_params, random_state=config.RANDOM_STATE, verbose=-1)
+            else:
+                model_class = {'xgboost': xgb.XGBClassifier, 'random_forest': RandomForestClassifier,
+                               'logistic_regression': LogisticRegression}[base_model_name]
+                model = model_class(
+                    **best_params, random_state=config.RANDOM_STATE)
+
             model.fit(X_train_fs, y_train_binned)
             pred_class = model.predict(X_test_fs).astype(int)
             alloc = bin_edges[np.minimum(pred_class + 1, len(bin_edges) - 1)]
@@ -297,10 +304,10 @@ class Trainer:
             print("\nNo successful models found to evaluate.")
             return pd.DataFrame(), pd.DataFrame(), []
 
-        regr_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
-            s.study_name.split('_')[:-1])]['type'] == 'regression']
-        class_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES['_'.join(
-            s.study_name.split('_')[:-1])]['type'] == 'classification']
+        regr_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES[self._get_family_name_from_study(
+            s)]['type'] == 'regression']
+        class_studies = [s for s in valid_studies if self.config.MODEL_FAMILIES[self._get_family_name_from_study(
+            s)]['type'] == 'classification']
 
         models_to_evaluate = []
         should_eval_all = force_evaluate_all or self.evaluate_all_archs
@@ -326,8 +333,9 @@ class Trainer:
 
         print("\nThe following models will be evaluated on the hold-out set:")
         for study in models_to_evaluate:
+            family_name = self._get_family_name_from_study(study)
             print(
-                f"  - {'_'.join(study.study_name.split('_')[:-1]).upper()} (CV Score: {study.best_value:.4f})")
+                f"  - {family_name.upper()} (CV Score: {study.best_value:.4f})")
 
         print("\nSubmitting model evaluation tasks to be run in parallel...")
         regr_results, class_results, all_model_stats = [], [], []
@@ -347,8 +355,7 @@ class Trainer:
                         class_results.append(result_row)
                     all_model_stats.append(model_stats)
                 except Exception as exc:
-                    family_name = '_'.join(
-                        future_to_study[future].study_name.split('_')[:-1])
+                    family_name = future_to_study[future].study_name
                     print(
                         f"\nModel {family_name} generated an exception: {exc}")
 
