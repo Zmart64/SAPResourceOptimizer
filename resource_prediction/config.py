@@ -1,6 +1,7 @@
 """Project configuration and hyperparameter search spaces."""
 
 from pathlib import Path
+import optuna
 
 
 class Config:
@@ -14,9 +15,13 @@ class Config:
     PROJECT_ROOT = Path(__file__).parent.parent
     DATA_DIR = PROJECT_ROOT / "data"
     OUTPUT_DIR = PROJECT_ROOT / "output"
+    MODELS_DIR = PROJECT_ROOT / "resource_prediction" / "models"
+    ALLOCATION_PLOT_PATH = OUTPUT_DIR / "memory_allocation_plot.png"
+    ALLOCATION_SUMMARY_REPORT_PATH = OUTPUT_DIR / "allocation_summary_report.csv"
 
     RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-4.csv"
     PROCESSED_DATA_DIR = DATA_DIR / "processed"
+    BASELINE_STATS_PATH = PROCESSED_DATA_DIR / "baseline_allocation_stats.pkl"
     X_TRAIN_PATH = PROCESSED_DATA_DIR / "X_train.pkl"
     Y_TRAIN_PATH = PROCESSED_DATA_DIR / "y_train.pkl"
     X_TEST_PATH = PROCESSED_DATA_DIR / "X_test.pkl"
@@ -45,8 +50,8 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 1
-    NUM_PARALLEL_WORKERS = None
+    N_CALLS_PER_FAMILY = 120
+    NUM_PARALLEL_WORKERS = 32
 
     MODEL_FAMILIES = {
         "qe_regression":     {"type": "regression", "base_model": "quantile_ensemble"},
@@ -55,7 +60,7 @@ class Config:
         "lightgbm_classification": {"type": "classification", "base_model": "lightgbm"},
         "rf_classification":     {"type": "classification", "base_model": "random_forest"},
         "rf_regression":         {"type": "regression", "base_model": "random_forest"},
-        "logistic_regression":   {"type": "regression", "base_model": "logistic_regression"},
+        "lr_classification":   {"type": "classification", "base_model": "logistic_regression"},
     }
 
     @staticmethod
@@ -125,8 +130,27 @@ class Config:
                 return {**common_params, **model_params}
 
             if base_model == 'logistic_regression':
-                model_params = {"C": trial.suggest_float(
-                    "C", 1e-2, 10.0, log=True)}
+                solver = trial.suggest_categorical(
+                    "solver", ["liblinear", "saga"])
+
+                penalty = trial.suggest_categorical(
+                    "penalty", ["l1", "l2", "elasticnet"])
+
+                if solver == "liblinear" and penalty == "elasticnet":
+                    raise optuna.exceptions.TrialPruned()
+
+                model_params = {
+                    "C": trial.suggest_float("C", 1e-2, 10.0, log=True),
+                    "solver": solver,
+                    "penalty": penalty,
+                }
+
+                if penalty == "elasticnet":
+                    if solver != "saga":
+                        raise optuna.exceptions.TrialPruned()
+                    model_params["l1_ratio"] = trial.suggest_float(
+                        "l1_ratio", 0, 1)
+
                 return {**common_params, **model_params}
 
         return {}

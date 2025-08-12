@@ -1,3 +1,5 @@
+# main.py
+
 """Command-line interface for the resource prediction pipeline."""
 
 import argparse
@@ -24,20 +26,27 @@ def main(args):
     """
     config = Config()
 
-    if args.preprocess_only or not args.skip_preprocessing:
+    if not args.skip_preprocessing and (args.run_search or args.evaluate_only):
         preprocessor = DataPreprocessor(config)
         preprocessor.process()
-        if args.preprocess_only:
-            print("Preprocessing complete. Exiting as requested.")
-            return
+
+    if args.preprocess_only:
+        preprocessor = DataPreprocessor(config)
+        preprocessor.process()
+        print("Preprocessing complete. Exiting as requested.")
+        return
+
+    trainer = Trainer(
+        config,
+        evaluate_all_archs=args.evaluate_all_archs,
+        task_type_filter=args.task_type,
+        save_models=args.save_models
+    )
 
     if args.run_search:
-        trainer = Trainer(
-            config,
-            evaluate_all_archs=args.evaluate_all_archs,
-            task_type_filter=args.task_type
-        )
         trainer.run_optimization_and_evaluation()
+    elif args.evaluate_only:
+        trainer.run_evaluation_from_files()
 
 
 if __name__ == "__main__":
@@ -46,20 +55,28 @@ if __name__ == "__main__":
         formatter_class=argparse.RawTextHelpFormatter
     )
 
-    parser.add_argument(
+    # Group for mutually exclusive actions. One of these is required.
+    action_group = parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
         "--run-search",
         action="store_true",
         help="Run the full hyperparameter search and final evaluation."
     )
+    action_group.add_argument(
+        "--evaluate-only",
+        action="store_true",
+        help="Evaluate models using best parameters from existing results CSV files, skipping the search."
+    )
+    action_group.add_argument(
+        "--preprocess-only",
+        action="store_true",
+        help="Only run the data preprocessing step and then exit."
+    )
+
     parser.add_argument(
         "--skip-preprocessing",
         action="store_true",
         help="Skip the data preprocessing step and use existing processed data files."
-    )
-    parser.add_argument(
-        "--preprocess-only",
-        action="store_true",
-        help="Only run the data preprocessing step and then exit."
     )
     parser.add_argument(
         "--evaluate-all-archs",
@@ -73,11 +90,12 @@ if __name__ == "__main__":
         default=None,
         help="Optionally filter the pipeline to run ONLY for a specific task type (e.g., 'regression').\nBy default, both are run."
     )
+    parser.add_argument(
+        "--save-models",
+        action="store_true",
+        help="If set, saves the final evaluated champion model(s) as .pkl files in the `resource_prediction/models` directory."
+    )
 
     args = parser.parse_args()
-
-    if not any(vars(args).values()):
-        parser.print_help()
-        sys.exit(1)
 
     main(args)

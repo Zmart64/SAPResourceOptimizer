@@ -1,0 +1,158 @@
+"""Functions for generating detailed model evaluation reports and plots."""
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+COLORS = {
+    "Under-allocated": "#e6261f",         # Red
+    "Perfectly-allocated": "#64a85f",      # Darker Green
+    "Well-allocated (1x-2x)": "#99c193",  # Light Green
+    "Severely Over (2x-3x)": "#fde940",   # Pale Yellow
+    "Extremely Over (3x-4x)": "#f5b70d",  # Golden Yellow
+    "Massively Over (4x+)": "#f37f00",    # Orange
+}
+LABELS = list(COLORS.keys())
+
+
+def calculate_allocation_categories(
+    name: str,
+    allocations: np.ndarray,
+    true_values: np.ndarray,
+    under_allocation_mask: np.ndarray | None = None
+) -> dict:
+    """
+    Calculates the distribution of jobs into detailed allocation categories
+    using a vectorized approach for performance.
+
+    Args:
+        name (str): The name of the model or 'Baseline'.
+        allocations (np.ndarray): The memory allocated for each job (GB).
+        true_values (np.ndarray): The true memory used by each job (GB).
+        under_allocation_mask (np.ndarray | None): A boolean array where True
+            indicates a job is definitively under-allocated (e.g., from fail counts).
+
+    Returns:
+        dict: A dictionary containing detailed statistics for the allocation strategy.
+    """
+    total_jobs = len(true_values)
+    if total_jobs == 0:
+        return {}
+
+    true_values_safe = np.maximum(true_values, 1e-9)
+    counts = {label: 0 for label in LABELS}
+
+    if under_allocation_mask is None:
+        is_under = allocations < true_values_safe
+    else:
+        is_under = under_allocation_mask | (allocations < true_values_safe)
+
+    counts["Under-allocated"] = np.sum(is_under)
+
+    # Process jobs that were not under-allocated
+    not_under_mask = ~is_under
+    alloc_ok = allocations[not_under_mask]
+    true_ok = true_values[not_under_mask]
+
+    # Perfectly allocated jobs
+    is_perfect = np.isclose(alloc_ok, true_ok)
+    counts["Perfectly-allocated"] = np.sum(is_perfect)
+
+    # Over-allocated jobs (those not under and not perfect)
+    is_over_mask = ~is_perfect
+    alloc_over = alloc_ok[is_over_mask]
+    true_over = true_ok[is_over_mask]
+    true_over_safe = np.maximum(true_over, 1e-9)
+
+    ratio = alloc_over / true_over_safe
+    counts["Well-allocated (1x-2x)"] = np.sum((ratio >= 1) & (ratio < 2))
+    counts["Severely Over (2x-3x)"] = np.sum((ratio >= 2) & (ratio < 3))
+    counts["Extremely Over (3x-4x)"] = np.sum((ratio >= 3) & (ratio < 4))
+    counts["Massively Over (4x+)"] = np.sum(ratio >= 4)
+
+    # Prepare detailed report dictionary
+    report = {"model_name": name}
+    for label in LABELS:
+        count = counts[label]
+        perc = (count / total_jobs) * 100
+        report[f"{label}_jobs"] = count
+        report[f"{label}_perc"] = perc
+
+    over_alloc_mem = np.maximum(0, allocations - true_values)
+    under_alloc_mem = np.maximum(0, true_values - allocations)
+    report["total_jobs"] = total_jobs
+    report["total_true_mem_gb"] = np.sum(true_values)
+    report["total_alloc_mem_gb"] = np.sum(allocations)
+    report["total_over_alloc_gb"] = np.sum(over_alloc_mem)
+    report["total_under_alloc_gb"] = np.sum(under_alloc_mem[is_under])
+
+    return report
+
+
+def plot_allocation_comparison(all_stats: list[dict], output_path: Path):
+    """
+    Generates a single stacked bar chart comparing the allocation performance
+    of the baseline against all evaluated models.
+    """
+    plot_data = []
+    for stats in all_stats:
+        row = {'Model': stats['model_name']}
+        for label in LABELS:
+            row[label] = stats.get(f"{label}_perc", 0)
+        plot_data.append(row)
+
+    df = pd.DataFrame(plot_data).set_index('Model')
+    df = df[LABELS]
+
+    fig, ax = plt.subplots(figsize=(16, 10))
+    df.plot(kind='bar', stacked=True, color=[
+            COLORS[label] for label in LABELS], ax=ax, width=0.8)
+
+    for c in ax.containers:
+        labels = [f'{w:.1f}%' if w > 1 else '' for w in c.datavalues]
+        ax.bar_label(c, labels=labels, label_type='center',
+                     fontsize=12, fontweight='bold', color='black')
+
+    ax.set_title("Memory Allocation Comparison",
+                 fontsize=28, fontweight='bold', pad=20)
+    ax.set_ylabel("Share of Jobs (%)", fontsize=18,
+                  fontweight='bold', labelpad=15)
+    ax.set_xlabel("Allocation Strategy", fontsize=18,
+                  fontweight='bold', labelpad=15)
+    ax.tick_params(axis='x', rotation=45, labelsize=14, labelright=False)
+    ax.tick_params(axis='y', labelsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_ylim(0, 100)
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, title='Allocation Category', fontsize=12,
+              title_fontsize=14, bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    plt.savefig(output_path)
+    plt.close(fig)
+    print(f"Combined allocation comparison plot saved to {output_path}")
+
+
+def generate_summary_report(all_results: list[dict], output_path: Path):
+    """
+    Generates a single CSV file summarizing the allocation performance
+    of the baseline and all evaluated models.
+    """
+    df = pd.DataFrame(all_results)
+
+    id_col = ['model_name']
+    count_cols = sorted([c for c in df.columns if c.endswith('_jobs')])
+    perc_cols = sorted([c for c in df.columns if c.endswith('_perc')])
+    mem_cols = sorted([c for c in df.columns if c.endswith('_gb')])
+
+    df = df[id_col + count_cols + perc_cols + mem_cols]
+
+    for col in df.columns:
+        if '_perc' in col or '_gb' in col:
+            df[col] = df[col].map('{:.2f}'.format)
+
+    df.to_csv(output_path, index=False)
+    print(f"Unified allocation summary report saved to {output_path}")
