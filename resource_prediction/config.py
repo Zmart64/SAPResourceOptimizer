@@ -59,7 +59,7 @@ class Config:
         "xgboost_regression":    {"type": "regression", "base_model": "xgboost"},
         "lightgbm_classification": {"type": "classification", "base_model": "lightgbm"},
         "rf_classification":     {"type": "classification", "base_model": "random_forest"},
-        "rf_regression":         {"type": "regression", "base_model": "random_forest"},
+        "lightgbm_regression":    {"type": "regression", "base_model": "lightgbm"},
         "lr_classification":   {"type": "classification", "base_model": "logistic_regression"},
     }
 
@@ -79,9 +79,13 @@ class Config:
         use_quant = trial.suggest_categorical("use_quant_feats", [True, False])
 
         if task_type == 'regression':
+
+            alpha = trial.suggest_categorical(
+                "alpha", [0.90, 0.95, 0.98, 0.99])
+
             if base_model == 'quantile_ensemble':
                 return {
-                    "alpha": trial.suggest_categorical("alpha", [0.90, 0.95, 0.98, 0.99]),
+                    "alpha": alpha,
                     "safety": trial.suggest_float("safety", 1.00, 1.15),
                     "gb_n_estimators": trial.suggest_int("gb_n_estimators", 200, 700),
                     "gb_max_depth": trial.suggest_int("gb_max_depth", 3, 9),
@@ -93,17 +97,20 @@ class Config:
                 }
             if base_model == 'xgboost':
                 return {
+                    "quantile_alpha": alpha,
+                    "objective": "reg:quantileerror",
                     "n_estimators": trial.suggest_int("n_estimators", 200, 800),
                     "max_depth": trial.suggest_int("max_depth", 4, 10),
                     "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-                    "alpha": trial.suggest_float("alpha", 0.5, 1.0),
                     "use_quant_feats": use_quant,
                 }
-            if base_model == 'random_forest':
+            if base_model == 'lightgbm':
                 return {
-                    "n_estimators": trial.suggest_int("n_estimators", 100, 500),
-                    "max_depth": trial.suggest_int("max_depth", 5, 20),
-                    "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
+                    "objective": "quantile",
+                    "alpha": alpha,
+                    "n_estimators": trial.suggest_int("n_estimators", 100, 700),
+                    "num_leaves": trial.suggest_int("num_leaves", 20, 60),
+                    "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
                     "use_quant_feats": use_quant,
                 }
 

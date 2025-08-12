@@ -4,9 +4,8 @@ import pandas as pd
 import numpy as np
 import multiprocessing
 import optuna
-from datetime import datetime
 
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.cluster import KMeans
@@ -66,7 +65,7 @@ class OptunaOptimizer:
         self.X_train = X_train
         self.y_train_gb = y_train[config.TARGET_COLUMN_PROCESSED]
         self.task_type_filter = task_type_filter
-        self.config.OPTUNA_DB_DIR.mkdir(exist_ok=True)
+        self.config.OPTUNA_DB_DIR.mkdir(exist_ok=True, parents=True)
 
     def _get_feature_set(self, use_quant_feats: bool):
         """Assembles the feature dataframe based on the trial parameter."""
@@ -89,15 +88,28 @@ class OptunaOptimizer:
 
     def _evaluate_regression(self, model, X, y):
         """Evaluates a regression model using time-series cross-validation."""
-        X_encoded = pd.get_dummies(
-            X, drop_first=True, dummy_na=False).astype(float)
-
-        tscv = TimeSeriesSplit(self.config.CV_SPLITS)
+        tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
-        for tr_idx, te_idx in tscv.split(X_encoded):
-            model.fit(X_encoded.iloc[tr_idx], y.iloc[tr_idx])
-            allocs.extend(model.predict(X_encoded.iloc[te_idx]))
-            truths.extend(y.iloc[te_idx])
+
+        if isinstance(model, QuantileEnsemblePredictor):
+            for tr_idx, te_idx in tscv.split(X):
+                model.fit(X.iloc[tr_idx], y.iloc[tr_idx])
+                allocs.extend(model.predict(X.iloc[te_idx]))
+                truths.extend(y.iloc[te_idx])
+        else:
+            X_encoded = pd.get_dummies(
+                X, drop_first=True, dummy_na=False).astype(float)
+            for tr_idx, te_idx in tscv.split(X_encoded):
+                X_train_fold, X_test_fold = X_encoded.iloc[tr_idx], X_encoded.iloc[te_idx]
+                y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
+
+                X_test_fold = X_test_fold.reindex(
+                    columns=X_train_fold.columns, fill_value=0)
+
+                model.fit(X_train_fold, y_train_fold)
+                allocs.extend(model.predict(X_test_fold))
+                truths.extend(y_test_fold)
+
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics)
 
@@ -129,43 +141,53 @@ class OptunaOptimizer:
         X_encoded = pd.get_dummies(
             X, drop_first=True, dummy_na=False).astype(float)
 
-        tscv = TimeSeriesSplit(self.config.CV_SPLITS)
+        tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
         for tr_idx, te_idx in tscv.split(X_encoded):
-            model.fit(X_encoded.iloc[tr_idx], y_binned.iloc[tr_idx])
-            pred_class = model.predict(X_encoded.iloc[te_idx]).astype(int)
+            X_train_fold, X_test_fold = X_encoded.iloc[tr_idx], X_encoded.iloc[te_idx]
+            y_train_fold, y_test_fold = y_binned.iloc[tr_idx], y.iloc[te_idx]
+
+            X_test_fold = X_test_fold.reindex(
+                columns=X_train_fold.columns, fill_value=0)
+
+            model.fit(X_train_fold, y_train_fold)
+            pred_class = model.predict(X_test_fold).astype(int)
             allocs.extend(bin_edges[np.minimum(
                 pred_class + 1, len(bin_edges) - 1)])
-            truths.extend(y.iloc[te_idx])
+            truths.extend(y_test_fold)
+
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics)
 
     def _objective(self, trial, base_model, model_type):
         """The core objective function for Optuna to minimize."""
         params = self.config.get_search_space(trial, base_model, model_type)
-        X_trial = self._get_feature_set(params.pop("use_quant_feats"))
+        use_quant_feats = params.pop("use_quant_feats")
+        X_trial = self._get_feature_set(use_quant_feats)
         model = None
 
         if model_type == "regression":
             if base_model == 'quantile_ensemble':
+                alpha = params.pop("alpha")
                 gb_params = {'n_estimators': params["gb_n_estimators"],
                              'max_depth': params["gb_max_depth"], 'learning_rate': params["gb_lr"]}
                 xgb_params = {'n_estimators': params["xgb_n_estimators"],
                               'max_depth': params["xgb_max_depth"], 'learning_rate': params["xgb_lr"]}
                 model = QuantileEnsemblePredictor(
-                    alpha=params["alpha"], safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params)
+                    alpha=alpha, safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params)
             elif base_model == 'xgboost':
                 model = xgb.XGBRegressor(
-                    **params, objective='reg:squarederror', n_jobs=1, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'random_forest':
-                model = RandomForestRegressor(
                     **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+            elif base_model == 'lightgbm':
+                model = lgb.LGBMRegressor(
+                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+
             if model is None:
                 raise ValueError(f"Unknown regression model: {base_model}")
             return self._evaluate_regression(model, X_trial, self.y_train_gb)
+
         else:  # Classification
-            n_bins = params.pop("n_bins")
-            strategy = params.pop("strategy")
+            n_bins, strategy = params.pop("n_bins"), params.pop("strategy")
             if 'lr' in params:
                 params['learning_rate'] = params.pop('lr')
 
@@ -181,43 +203,78 @@ class OptunaOptimizer:
             elif base_model == 'logistic_regression':
                 model = LogisticRegression(
                     **params, max_iter=1000, n_jobs=1, random_state=self.config.RANDOM_STATE, multi_class="auto")
+
             if model is None:
                 raise ValueError(f"Unknown classification model: {base_model}")
             return self._evaluate_classification(model, X_trial, self.y_train_gb, n_bins, strategy)
 
     def run(self):
-        """Runs the complete Optuna optimization for all configured model families."""
+        """
+        Runs the hyperparameter search for all relevant model families. This method
+        provides backward compatibility by first trying to load existing timestamped
+        studies, then falls back to creating/loading studies with a clean,
+        deterministic name.
+        """
         all_studies = []
         for family_name, metadata in self.config.MODEL_FAMILIES.items():
             if self.task_type_filter and metadata['type'] != self.task_type_filter:
                 continue
 
             storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"
-            study_name = f"{family_name}_{datetime.now().strftime('%Y%m%d')}"
+            db_path = self.config.OPTUNA_DB_DIR / f"{family_name}.db"
+            study = None
 
-            try:
-                study = optuna.load_study(
-                    study_name=study_name, storage=storage_url)
-                print(
-                    f"Resuming study '{study_name}' for model family '{family_name}'.")
-            except KeyError:
-                study = optuna.create_study(study_name=study_name, storage=storage_url, direction="minimize",
-                                            sampler=optuna.samplers.TPESampler(seed=self.config.RANDOM_STATE))
-                print(
-                    f"Creating new study '{study_name}' for model family '{family_name}'.")
+            if db_path.exists():
+                try:
+                    all_summaries = optuna.study.get_all_study_summaries(
+                        storage=storage_url)
+                    legacy_summaries = [
+                        s for s in all_summaries if s.study_name.startswith(f"{family_name}_")]
 
-            n_workers = self.config.NUM_PARALLEL_WORKERS or max(
-                1, multiprocessing.cpu_count() // 2)
-            remaining_trials = self.config.N_CALLS_PER_FAMILY - \
-                len(study.trials)
+                    if legacy_summaries:
+                        best_legacy_study = max(
+                            legacy_summaries, key=lambda s: s.n_trials)
+                        print(
+                            f"Resuming existing legacy study '{best_legacy_study.study_name}' for model family '{family_name}'.")
+                        study = optuna.load_study(
+                            study_name=best_legacy_study.study_name,
+                            storage=storage_url
+                        )
+                except Exception as e:
+                    print(
+                        f"Warning: Could not read existing database at {db_path}. Error: {e}")
+
+            if study is None:
+                study_name = family_name  # The clean, deterministic name
+                print(
+                    f"Loading or creating new study '{study_name}' for model family '{family_name}'.")
+                study = optuna.create_study(
+                    study_name=study_name,
+                    storage=storage_url,
+                    direction="minimize",
+                    sampler=optuna.samplers.TPESampler(
+                        seed=self.config.RANDOM_STATE),
+                    load_if_exists=True,
+                )
+
+            completed_trials = len(
+                [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+            remaining_trials = self.config.N_CALLS_PER_FAMILY - completed_trials
 
             if remaining_trials > 0:
                 print(
-                    f"Optimising {family_name.upper()} – running {remaining_trials} more trials with {n_workers} workers")
-                study.optimize(lambda trial: self._objective(
-                    trial, metadata['base_model'], metadata['type']), n_trials=remaining_trials, n_jobs=n_workers, show_progress_bar=True)
+                    f"Optimising {family_name.upper()} – running {remaining_trials} more trials...")
+                study.optimize(
+                    lambda trial: self._objective(
+                        trial, metadata['base_model'], metadata['type']),
+                    n_trials=remaining_trials,
+                    n_jobs=self.config.NUM_PARALLEL_WORKERS,
+                    show_progress_bar=True
+                )
             else:
                 print(
-                    f"Skipping {family_name.upper()} – already optimised ({len(study.trials)} trials)")
+                    f"Skipping {family_name.upper()} – already optimised with {completed_trials} trials.")
+
             all_studies.append(study)
+
         return all_studies

@@ -212,7 +212,33 @@ class Trainer:
 
         model, bin_edges, alloc = None, None, None
 
-        if task_type == 'classification':
+        if task_type == 'regression':
+            if base_model_name == 'quantile_ensemble':
+                alpha = best_params.pop("alpha")
+                gb_params = {'n_estimators': best_params["gb_n_estimators"],
+                             'max_depth': best_params["gb_max_depth"], 'learning_rate': best_params["gb_lr"], 'verbose': 0}
+                xgb_params = {'n_estimators': best_params["xgb_n_estimators"],
+                              'max_depth': best_params["xgb_max_depth"], 'learning_rate': best_params["xgb_lr"]}
+                model = QuantileEnsemblePredictor(
+                    alpha=alpha, safety=best_params["safety"], gb_params=gb_params, xgb_params=xgb_params)
+
+            elif base_model_name == 'xgboost':
+                model = xgb.XGBRegressor(
+                    **best_params, random_state=config.RANDOM_STATE)
+
+            elif base_model_name == 'lightgbm':
+                model = lgb.LGBMRegressor(
+                    **best_params, random_state=config.RANDOM_STATE)
+
+            model.fit(X_train_fs, y_train_gb)
+            alloc = model.predict(X_test_fs)
+
+            if base_model_name != 'random_forest':  # RF is handled separately
+                model.fit(X_train_fs, y_train_gb)
+                alloc = model.predict(X_test_fs)
+
+        elif task_type == 'classification':
+            # This logic remains completely unchanged
             n_bins, strategy = best_params.pop(
                 "n_bins"), best_params.pop("strategy")
             if 'lr' in best_params:
@@ -237,7 +263,6 @@ class Trainer:
             bin_edges = np.array(sorted(list(set(bin_edges))))
             y_train_binned = pd.cut(
                 y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
-
             model_class = {'xgboost': xgb.XGBClassifier, 'lightgbm': lgb.LGBMClassifier,
                            'random_forest': RandomForestClassifier, 'logistic_regression': LogisticRegression}[base_model_name]
             model = model_class(
@@ -245,21 +270,6 @@ class Trainer:
             model.fit(X_train_fs, y_train_binned)
             pred_class = model.predict(X_test_fs).astype(int)
             alloc = bin_edges[np.minimum(pred_class + 1, len(bin_edges) - 1)]
-        else:  # Regression
-            if base_model_name == 'quantile_ensemble':
-                gb_params = {'n_estimators': best_params["gb_n_estimators"],
-                             'max_depth': best_params["gb_max_depth"], 'learning_rate': best_params["gb_lr"], 'verbose': 0}
-                xgb_params = {'n_estimators': best_params["xgb_n_estimators"],
-                              'max_depth': best_params["xgb_max_depth"], 'learning_rate': best_params["xgb_lr"]}
-                model = QuantileEnsemblePredictor(
-                    alpha=best_params["alpha"], safety=best_params["safety"], gb_params=gb_params, xgb_params=xgb_params)
-            else:
-                model_class = {'xgboost': xgb.XGBRegressor,
-                               'random_forest': RandomForestRegressor}[base_model_name]
-                model = model_class(
-                    **best_params, random_state=config.RANDOM_STATE)
-            model.fit(X_train_fs, y_train_gb)
-            alloc = model.predict(X_test_fs)
 
         if save_model:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
