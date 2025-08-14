@@ -28,8 +28,22 @@ def run_qe(MODEL_PAYLOAD_PATH):
 
     # Load the model 
     try:
+        # Add project root to Python path for proper imports
+        import sys
+        project_root = os.path.dirname(SCRIPT_DIR)
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+        
+        # Import model classes to make them available for unpickling
+        from resource_prediction.models import QEPredictor, QuantileEnsemblePredictor
+        
         model_path = os.path.join(SCRIPT_DIR, MODEL_PAYLOAD_PATH)
         model = joblib.load(model_path)
+        
+        # Handle backward compatibility: older models may have 'cols' instead of 'columns'
+        if hasattr(model, 'cols') and not hasattr(model, 'columns'):
+            model.columns = model.cols
+            
     except Exception as e:
         st.error(f"FATAL: Could not load model. Error: {e}")
         st.stop()
@@ -87,13 +101,16 @@ if model_choice != st.session_state.model_type:
     st.session_state.model_type = model_choice
     st.rerun()
 
-# Configuration - Updated paths to use artifacts directory
+# Configuration - Updated paths to use absolute paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
 MODEL_PATHS = {
-    INITIAL_APPROACH: "../artifacts/trained_models/app/initial_approach/final_model.pkl",
-    CLASSIFICATION: "../artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl",
-    QE_BALANCED: "../artifacts/trained_models/app/qe/qe_balanced.pkl",
-    QE_TINY_UNDER_ALLOC: "../artifacts/trained_models/app/qe/qe_tiny_under_alloc.pkl",
-    QE_SMALL_WASTE: "../artifacts/trained_models/app/qe/qe_small_waste.pkl",
+    INITIAL_APPROACH: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/initial_approach/final_model.pkl"),
+    CLASSIFICATION: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl"),
+    QE_BALANCED: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_balanced.pkl"),
+    QE_TINY_UNDER_ALLOC: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_tiny_under_alloc.pkl"),
+    QE_SMALL_WASTE: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_small_waste.pkl"),
 }
 
 MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../artifacts/trained_models/app/initial_approach/final_model.pkl")
