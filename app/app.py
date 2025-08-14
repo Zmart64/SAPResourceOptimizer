@@ -87,16 +87,16 @@ if model_choice != st.session_state.model_type:
     st.session_state.model_type = model_choice
     st.rerun()
 
-# Configuration 
+# Configuration - Updated paths to use artifacts directory
 MODEL_PATHS = {
-    INITIAL_APPROACH: "initial_approach/final_model.pkl",
-    CLASSIFICATION: "classification/xgboost_uncertainty_model.pkl",
-    QE_BALANCED: "qe/qe_balanced.pkl",
-    QE_TINY_UNDER_ALLOC: "qe/qe_tiny_under_alloc.pkl",
-    QE_SMALL_WASTE: "qe/qe_small_waste.pkl",
+    INITIAL_APPROACH: "../artifacts/trained_models/app/initial_approach/final_model.pkl",
+    CLASSIFICATION: "../artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl",
+    QE_BALANCED: "../artifacts/trained_models/app/qe/qe_balanced.pkl",
+    QE_TINY_UNDER_ALLOC: "../artifacts/trained_models/app/qe/qe_tiny_under_alloc.pkl",
+    QE_SMALL_WASTE: "../artifacts/trained_models/app/qe/qe_small_waste.pkl",
 }
 
-MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "initial_approach/final_model.pkl")
+MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../artifacts/trained_models/app/initial_approach/final_model.pkl")
 
 # Depending on the model run the required function
 if st.session_state.model_type == INITIAL_APPROACH:

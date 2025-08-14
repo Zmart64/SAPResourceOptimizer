@@ -171,14 +171,14 @@ if model_choice != st.session_state.model_type:
     st.session_state.model_type = model_choice
     st.rerun()
 
-# --- Configuration ---
+# --- Configuration --- Updated to use artifacts directory
 MODEL_PATHS = {
-    "Regression": "regression/final_model.pkl",
-    "Classification": "classification/xgboost_uncertainty_model.pkl",
-    "Quantile-Ensemble": "qe_trial_32_55.pkl"
+    "Regression": "../../artifacts/trained_models/app/initial_approach/final_model.pkl",
+    "Classification": "../../artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl",
+    "Quantile-Ensemble": "../../artifacts/trained_models/app/qe/qe_balanced.pkl"  # Using balanced as default QE model
 }
 
-MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "regression/final_model.pkl")
+MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../../artifacts/trained_models/app/initial_approach/final_model.pkl")
 
 if st.session_state.model_type == "Quantile-Ensemble":
     run_qe(MODEL_PAYLOAD_PATH)
