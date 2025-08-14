@@ -70,6 +70,25 @@ The resource prediction pipeline is designed to predict peak memory requirements
 3. **Model Training**: Multiple ML algorithms (regression and classification)
 4. **Evaluation**: Business-focused metrics and final model selection
 
+**Unified Model Architecture:**
+
+The project uses a standardized :class:`~resource_prediction.models.base.BasePredictor` interface that ensures consistency across all model implementations:
+
+- **Single Source of Truth**: All model definitions in ``resource_prediction/models/``
+- **Clean Separation**: Model code separate from trained artifacts (``artifacts/trained_models/``)
+- **Backward Compatibility**: Existing imports continue to work
+- **Extensible Design**: New models implement the same interface
+
+.. code-block:: python
+
+   # Import any model using unified interface
+   from resource_prediction.models import QEPredictor, QuantileEnsemblePredictor
+   
+   # All models implement the same interface
+   model = QEPredictor()  # Backward compatible
+   model.fit(X_train, y_train)
+   predictions = model.predict(X_test)
+
 First run
 ---------
 
@@ -191,10 +210,30 @@ additional families automatically when the configuration is updated.
 
 **Adding New Models**
 
-1. Create model implementation in ``resource_prediction/models/``
-2. Add hyperparameter search space to ``Config.get_search_space()``
-3. Register in ``Config.MODEL_FAMILIES`` dictionary
-4. Update command-line options if needed
+The unified architecture makes extending the system straightforward:
+
+1. **Create model implementation** extending :class:`~resource_prediction.models.base.BasePredictor`:
+
+.. code-block:: python
+
+   # resource_prediction/models/my_model.py
+   from .base import BasePredictor
+   
+   class MyPredictor(BasePredictor):
+       def fit(self, X, y, **fit_params):
+           # Your implementation
+           pass
+       
+       def predict(self, X):
+           # Your implementation
+           pass
+
+2. **Register in model registry** (``resource_prediction/models/__init__.py``)
+3. **Add hyperparameter search space** to ``Config.get_search_space()``
+4. **Register in ``Config.MODEL_FAMILIES``** dictionary
+5. **Update command-line options** if needed
+
+The :class:`~resource_prediction.models.base.BasePredictor` interface ensures all models have consistent ``fit()`` and ``predict()`` methods, making them interchangeable throughout the system.
 
 **Customizing Business Logic**
 
@@ -238,3 +277,75 @@ Example Workflows
    python main.py --task-type regression --run-search --evaluate-all-archs
 
 This will generate performance comparisons and help select the best model for deployment.
+
+Interactive Web Applications
+----------------------------
+
+The project includes Streamlit-based web applications for interactive model exploration and real-time prediction.
+
+**Main Dashboard**
+
+.. code-block:: console
+
+   # Launch the main application dashboard
+   streamlit run app/app.py
+
+The main dashboard provides access to all available model applications and allows comparison between different approaches.
+
+**Quantile Ensemble Application**
+
+.. code-block:: console
+
+   # Run the quantile ensemble specific application
+   streamlit run app/qe/app_qe.py
+
+Features:
+
+- **Interactive Prediction**: Real-time memory prediction with adjustable build parameters
+- **Model Variants**: Choose between different QE model configurations (balanced, small waste, tiny under-allocation)
+- **Simulation Mode**: Batch prediction capabilities with CSV data
+- **Visualization**: Real-time charts showing prediction behavior and confidence intervals
+
+**Classification Application**
+
+.. code-block:: console
+
+   # Run the classification model application
+   streamlit run app/classification/app_classification.py
+
+Features:
+
+- **Memory Bin Prediction**: Classify builds into memory requirement categories
+- **Uncertainty Quantification**: Prediction confidence and uncertainty estimates
+- **Feature Analysis**: Understand which features drive predictions
+- **Comparison Tools**: Compare classification vs regression approaches
+
+**Application Structure**
+
+The web applications use the unified model architecture:
+
+.. code-block:: python
+
+   # Applications import models consistently
+   from resource_prediction.models import QEPredictor
+   
+   # Load trained models from artifacts directory
+   model = joblib.load('artifacts/trained_models/app/qe/qe_balanced.pkl')
+
+**Trained Model Artifacts**
+
+Pre-trained models are organized in the ``artifacts/trained_models/`` directory:
+
+.. code-block:: text
+
+   artifacts/trained_models/
+   ├── app/                           # Models for web applications
+   │   ├── qe/                        # Quantile ensemble variants
+   │   │   ├── qe_balanced.pkl        # Balanced accuracy/efficiency
+   │   │   ├── qe_small_waste.pkl     # Optimized for minimal waste
+   │   │   └── qe_tiny_under_alloc.pkl # Optimized for failure prevention
+   │   ├── classification/            # Classification models
+   │   └── initial_approach/          # Legacy regression models
+   └── resource_prediction/           # Models from training pipeline
+
+These applications demonstrate how to use the trained models in production-like scenarios and provide tools for stakeholders to understand model behavior without running the full training pipeline.
