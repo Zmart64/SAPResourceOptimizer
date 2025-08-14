@@ -9,7 +9,7 @@ import streamlit as st
 import altair as alt
 import pandas as pd
 import numpy as np
-from qe.models.qe_model import QEPredictor
+from resource_prediction.models import QEPredictor
 import joblib
 import time
 from collections import deque
