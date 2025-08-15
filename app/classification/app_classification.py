@@ -8,7 +8,15 @@ import os
 import warnings
 import pickle
 import ast
+import sys
 from collections import deque
+
+# Add the app directory to the Python path to import utils
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_DIR = os.path.dirname(SCRIPT_DIR)
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 
 
