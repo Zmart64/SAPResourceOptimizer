@@ -26,8 +26,6 @@ altair = "^5.5.0"
 
 [tool.poetry.dev-dependencies]
 sphinx = "^7.0.0"
-
-[tool.poetry.group.dev.dependencies]
 sphinx-rtd-theme = "^3.0.2"
 
 [build-system]
