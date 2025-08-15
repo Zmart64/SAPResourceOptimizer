@@ -17,7 +17,6 @@ from sklearn.ensemble import GradientBoostingRegressor
 import xgboost as xgb
 import os
 import pickle
-from initial_approach.app_regression import run_regression
 from classification.app_classification import run_classification
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 
@@ -79,7 +78,6 @@ def run_qe(MODEL_PAYLOAD_PATH):
 
 
 # Define the models the user can choose from 
-INITIAL_APPROACH = "Initial Approach - Classification"
 CLASSIFICATION = "Classification"
 QE_BALANCED = "Quantile-Ensemble - Balanced Approach"
 QE_TINY_UNDER_ALLOC = "Quantile-Ensemble - Tiny Under Allocation"
@@ -89,11 +87,11 @@ st.set_page_config(layout="wide")
 
 # Initialize session state with default model
 if "model_type" not in st.session_state:
-    st.session_state.model_type = INITIAL_APPROACH
+    st.session_state.model_type = CLASSIFICATION
 
 # Sidebar model selector
 st.sidebar.header("Model Selection")
-model_choice = st.sidebar.radio("Choose prediction model:", [INITIAL_APPROACH, CLASSIFICATION, QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE], 
+model_choice = st.sidebar.radio("Choose prediction model:", [CLASSIFICATION, QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE], 
                                 index=0)
 
 # If changed, update session state and rerun
@@ -106,20 +104,16 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
 MODEL_PATHS = {
-    INITIAL_APPROACH: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/initial_approach/final_model.pkl"),
     CLASSIFICATION: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl"),
     QE_BALANCED: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_balanced.pkl"),
     QE_TINY_UNDER_ALLOC: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_tiny_under_alloc.pkl"),
     QE_SMALL_WASTE: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_small_waste.pkl"),
 }
 
-MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../artifacts/trained_models/app/initial_approach/final_model.pkl")
+MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl")
 
 # Depending on the model run the required function
-if st.session_state.model_type == INITIAL_APPROACH:
-    SIMULATION_DATA_PATH = "initial_approach/simulation_data.csv"
-    run_regression(MODEL_PAYLOAD_PATH, SIMULATION_DATA_PATH)
-elif st.session_state.model_type == CLASSIFICATION:
+if st.session_state.model_type == CLASSIFICATION:
     run_classification(MODEL_PAYLOAD_PATH)
 elif st.session_state.model_type in (QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE):
     run_qe(MODEL_PAYLOAD_PATH)

@@ -145,8 +145,7 @@ artifacts/trained_models/       # Saved model files (.pkl)
 app/                           # Interactive web applications
 ├── app.py                     # Main Streamlit dashboard
 ├── qe/                        # Quantile ensemble app
-├── classification/            # Classification model app
-└── initial_approach/          # Initial regression app
+└── classification/            # Classification model app
 ```
 
 ## How to Extend
@@ -219,8 +218,7 @@ streamlit run app/app.py
 ```
 
 The application features:
-- **Model Selection**: Radio button interface to choose between 5 different models:
-  - Initial Approach (Classification)
+- **Model Selection**: Radio button interface to choose between 4 different models:
   - Classification
   - Quantile Ensemble (3 variants: Balanced, Tiny Under-allocation, Small Waste)
 - **Interactive Prediction**: Real-time memory prediction with simulation data
@@ -228,4 +226,4 @@ The application features:
 - **Simulation Mode**: Automatic batch processing with configurable delay
 - **Model-Specific Interfaces**: Each model type has its own optimized interface
 
-The app dynamically loads the appropriate model and configuration based on user selection, with helper modules in the subdirectories (`app/qe/`, `app/classification/`, `app/initial_approach/`) providing model-specific functionality.
+The app dynamically loads the appropriate model and configuration based on user selection, with helper modules in the subdirectories (`app/qe/`, `app/classification/`) providing model-specific functionality.

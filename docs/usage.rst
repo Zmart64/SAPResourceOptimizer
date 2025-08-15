@@ -323,9 +323,8 @@ The project includes a unified Streamlit-based web application for interactive m
 
 The main application provides a comprehensive interface with:
 
-- **Model Selection**: Radio button interface to choose between 5 different models:
+- **Model Selection**: Radio button interface to choose between 4 different models:
   
-  - **Initial Approach** - Classification model
   - **Classification** - XGBoost uncertainty model  
   - **Quantile Ensemble** - Three variants:
     
@@ -350,19 +349,15 @@ The application uses a modular design:
    ├── qe/                        # Quantile ensemble helper functions
    │   ├── app_qe.py             # QE-specific functions (not standalone)
    │   └── simulation_data.csv    # QE simulation data
-   ├── classification/            # Classification helper functions  
-   │   ├── app_classification.py  # Classification functions (not standalone)
-   │   └── *.csv                 # Classification test data
-   └── initial_approach/          # Initial approach helper functions
-       ├── app_regression.py      # Regression functions (not standalone)
-       └── simulation_data.csv    # Regression simulation data
+   └── classification/            # Classification helper functions  
+       ├── app_classification.py  # Classification functions (not standalone)
+       └── *.csv                 # Classification test data
 
 The main ``app.py`` imports functions from the helper modules and dynamically calls the appropriate one based on user selection:
 
 .. code-block:: python
 
    # Main app imports helper functions
-   from initial_approach.app_regression import run_regression
    from classification.app_classification import run_classification
    
    # Calls appropriate function based on model selection
@@ -391,8 +386,7 @@ Pre-trained models are organized in the ``artifacts/trained_models/`` directory:
    │   │   ├── qe_balanced.pkl        # Balanced accuracy/efficiency
    │   │   ├── qe_small_waste.pkl     # Optimized for minimal waste
    │   │   └── qe_tiny_under_alloc.pkl # Optimized for failure prevention
-   │   ├── classification/            # Classification models
-   │   └── initial_approach/          # Legacy regression models
+   │   └── classification/            # Classification models
    └── resource_prediction/           # Models from training pipeline
 
 These applications demonstrate how to use the trained models in production-like scenarios and provide tools for stakeholders to understand model behavior without running the full training pipeline.
