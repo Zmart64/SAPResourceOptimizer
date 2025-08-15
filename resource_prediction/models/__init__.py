@@ -1,9 +1,15 @@
 """Model implementations for the resource prediction project.
 
-At present the project relies primarily on models from external
-libraries such as scikit-learn, XGBoost, LightGBM and CatBoost. This
-package acts as a placeholder where bespoke or extended model
-implementations can be added in the future.
+This package contains unified model implementations and interfaces for
+the resource prediction project. All models implement the BasePredictor
+interface for consistency across training and application layers.
 """
 
-__all__: list[str] = []
+from .base import BasePredictor
+from .quantile_ensemble import QuantileEnsemblePredictor, QEPredictor
+
+__all__ = [
+    "BasePredictor",
+    "QuantileEnsemblePredictor", 
+    "QEPredictor"  # Alias for backward compatibility
+]

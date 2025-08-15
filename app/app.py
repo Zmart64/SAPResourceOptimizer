@@ -2,22 +2,28 @@ import streamlit as st
 import altair as alt
 import pandas as pd
 import numpy as np
-import warnings
-import ast
-from collections import deque
-import streamlit as st
-import altair as alt
-import pandas as pd
-import numpy as np
-from qe.models.qe_model import QEPredictor
 import joblib
 import time
+import os
+import pickle
+import sys
 from collections import deque
 from sklearn.ensemble import GradientBoostingRegressor
 import xgboost as xgb
-import os
-import pickle
-from initial_approach.app_regression import run_regression
+
+# Add project root to Python path for proper imports
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from resource_prediction.models import QEPredictor
+
+# Now add the app directory to import app modules
+APP_DIR = SCRIPT_DIR
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
 from classification.app_classification import run_classification
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 
@@ -28,8 +34,16 @@ def run_qe(MODEL_PAYLOAD_PATH):
 
     # Load the model 
     try:
+        # Import model classes to make them available for unpickling
+        from resource_prediction.models import QEPredictor, QuantileEnsemblePredictor
+        
         model_path = os.path.join(SCRIPT_DIR, MODEL_PAYLOAD_PATH)
         model = joblib.load(model_path)
+        
+        # Handle backward compatibility: older models may have 'cols' instead of 'columns'
+        if hasattr(model, 'cols') and not hasattr(model, 'columns'):
+            model.columns = model.cols
+            
     except Exception as e:
         st.error(f"FATAL: Could not load model. Error: {e}")
         st.stop()
@@ -65,7 +79,6 @@ def run_qe(MODEL_PAYLOAD_PATH):
 
 
 # Define the models the user can choose from 
-INITIAL_APPROACH = "Initial Approach - Classification"
 CLASSIFICATION = "Classification"
 QE_BALANCED = "Quantile-Ensemble - Balanced Approach"
 QE_TINY_UNDER_ALLOC = "Quantile-Ensemble - Tiny Under Allocation"
@@ -75,11 +88,11 @@ st.set_page_config(layout="wide")
 
 # Initialize session state with default model
 if "model_type" not in st.session_state:
-    st.session_state.model_type = INITIAL_APPROACH
+    st.session_state.model_type = CLASSIFICATION
 
 # Sidebar model selector
 st.sidebar.header("Model Selection")
-model_choice = st.sidebar.radio("Choose prediction model:", [INITIAL_APPROACH, CLASSIFICATION, QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE], 
+model_choice = st.sidebar.radio("Choose prediction model:", [CLASSIFICATION, QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE], 
                                 index=0)
 
 # If changed, update session state and rerun
@@ -87,22 +100,18 @@ if model_choice != st.session_state.model_type:
     st.session_state.model_type = model_choice
     st.rerun()
 
-# Configuration 
+# Configuration - Updated paths to use absolute paths
 MODEL_PATHS = {
-    INITIAL_APPROACH: "initial_approach/final_model.pkl",
-    CLASSIFICATION: "classification/xgboost_uncertainty_model.pkl",
-    QE_BALANCED: "qe/qe_balanced.pkl",
-    QE_TINY_UNDER_ALLOC: "qe/qe_tiny_under_alloc.pkl",
-    QE_SMALL_WASTE: "qe/qe_small_waste.pkl",
+    CLASSIFICATION: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl"),
+    QE_BALANCED: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_balanced.pkl"),
+    QE_TINY_UNDER_ALLOC: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_tiny_under_alloc.pkl"),
+    QE_SMALL_WASTE: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_small_waste.pkl"),
 }
 
-MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "initial_approach/final_model.pkl")
+MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl")
 
 # Depending on the model run the required function
-if st.session_state.model_type == INITIAL_APPROACH:
-    SIMULATION_DATA_PATH = "initial_approach/simulation_data.csv"
-    run_regression(MODEL_PAYLOAD_PATH, SIMULATION_DATA_PATH)
-elif st.session_state.model_type == CLASSIFICATION:
+if st.session_state.model_type == CLASSIFICATION:
     run_classification(MODEL_PAYLOAD_PATH)
 elif st.session_state.model_type in (QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE):
     run_qe(MODEL_PAYLOAD_PATH)

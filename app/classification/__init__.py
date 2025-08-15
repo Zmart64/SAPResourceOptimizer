@@ -1,0 +1,1 @@
+"""Classification model web application."""
