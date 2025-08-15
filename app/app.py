@@ -18,8 +18,8 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from resource_prediction.models import QEPredictor
-from .classification.app_classification import run_classification
-from .utils import (setup_sidebar, setup_ui, run_simulation_loop)
+from classification.app_classification import run_classification
+from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 
 def run_qe(MODEL_PAYLOAD_PATH):
     """Runs the app for the selected quantile ensemble model"""
