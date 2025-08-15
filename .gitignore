@@ -40,3 +40,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# output
+artifacts/

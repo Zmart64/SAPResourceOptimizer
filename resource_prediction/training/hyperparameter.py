@@ -13,48 +13,7 @@ import xgboost as xgb
 import lightgbm as lgb
 
 from resource_prediction.config import Config
-
-
-class QuantileEnsemblePredictor:
-    """An ensemble regressor combining GradientBoosting and XGBoost quantiles."""
-
-    def __init__(self, alpha=0.95, safety=1.05, gb_params=None, xgb_params=None):
-        self.alpha = alpha
-        self.safety = safety
-        self.gb = GradientBoostingRegressor(
-            loss="quantile", alpha=alpha, random_state=Config.RANDOM_STATE, **(gb_params or {})
-        )
-        xgb_defaults = {
-            "objective": "reg:quantileerror", "quantile_alpha": alpha,
-            "n_jobs": 1, "random_state": Config.RANDOM_STATE
-        }
-        xgb_defaults.update(xgb_params or {})
-        self.xgb = xgb.XGBRegressor(**xgb_defaults)
-        self.columns = None
-
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """One-hot encodes categorical features and aligns columns."""
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        if fit:
-            self.columns = Xd.columns.tolist()
-        else:
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for c in missing_cols:
-                Xd[c] = 0
-            Xd = Xd[self.columns]
-        return Xd.astype(float)
-
-    def fit(self, X, y, **fit_params):
-        """Fits both underlying regressors on the training data."""
-        Xd = self._encode(X, fit=True)
-        self.gb.fit(Xd, y)
-        self.xgb.fit(Xd, y, **fit_params)
-
-    def predict(self, X):
-        """Predicts by taking the maximum of the two models and applying a safety factor."""
-        Xd = self._encode(X)
-        preds = np.maximum(self.gb.predict(Xd), self.xgb.predict(Xd))
-        return preds * self.safety
+from resource_prediction.models import QuantileEnsemblePredictor
 
 
 class OptunaOptimizer:
@@ -174,7 +133,7 @@ class OptunaOptimizer:
                 xgb_params = {'n_estimators': params["xgb_n_estimators"],
                               'max_depth': params["xgb_max_depth"], 'learning_rate': params["xgb_lr"]}
                 model = QuantileEnsemblePredictor(
-                    alpha=alpha, safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params)
+                    alpha=alpha, safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params, random_state=self.config.RANDOM_STATE)
             elif base_model == 'xgboost':
                 model = xgb.XGBRegressor(
                     **params, n_jobs=1, random_state=self.config.RANDOM_STATE)

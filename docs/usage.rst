@@ -70,6 +70,25 @@ The resource prediction pipeline is designed to predict peak memory requirements
 3. **Model Training**: Multiple ML algorithms (regression and classification)
 4. **Evaluation**: Business-focused metrics and final model selection
 
+**Unified Model Architecture:**
+
+The project uses a standardized :class:`~resource_prediction.models.base.BasePredictor` interface that ensures consistency across all model implementations:
+
+- **Single Source of Truth**: All model definitions in ``resource_prediction/models/``
+- **Clean Separation**: Model code separate from trained artifacts (``artifacts/trained_models/``)
+- **Backward Compatibility**: Existing imports continue to work
+- **Extensible Design**: New models implement the same interface
+
+.. code-block:: python
+
+   # Import any model using unified interface
+   from resource_prediction.models import QEPredictor, QuantileEnsemblePredictor
+   
+   # All models implement the same interface
+   model = QEPredictor()  # Backward compatible
+   model.fit(X_train, y_train)
+   predictions = model.predict(X_test)
+
 First run
 ---------
 
@@ -191,10 +210,96 @@ additional families automatically when the configuration is updated.
 
 **Adding New Models**
 
-1. Create model implementation in ``resource_prediction/models/``
-2. Add hyperparameter search space to ``Config.get_search_space()``
-3. Register in ``Config.MODEL_FAMILIES`` dictionary
-4. Update command-line options if needed
+The unified architecture makes extending the system straightforward. Here's the complete process using an example `MyPredictor` model:
+
+1. **Create model implementation** extending :class:`~resource_prediction.models.base.BasePredictor`:
+
+.. code-block:: python
+
+   # resource_prediction/models/my_model.py
+   from .base import BasePredictor
+   
+   class MyPredictor(BasePredictor):
+       def __init__(self, param1=0.5, param2=50, **kwargs):
+           self.param1 = param1
+           self.param2 = param2
+           
+       def fit(self, X, y, **fit_params):
+           # Your implementation
+           pass
+       
+       def predict(self, X):
+           # Your implementation
+           pass
+
+2. **Register in model registry** (``resource_prediction/models/__init__.py``):
+
+.. code-block:: python
+
+   from .my_model import MyPredictor
+   
+   __all__ = [
+       "BasePredictor",
+       "QEPredictor", 
+       "QuantileEnsemblePredictor",
+       "MyPredictor"  # Add your new model
+   ]
+
+3. **Choose a base_model identifier** and add to ``Config.MODEL_FAMILIES`` in ``resource_prediction/config.py``:
+
+.. code-block:: python
+
+   MODEL_FAMILIES = {
+       # Existing models...
+       "my_model_regression": {"type": "regression", "base_model": "my_custom_model"},
+       "my_model_classification": {"type": "classification", "base_model": "my_custom_model"},
+   }
+
+   # Note: "my_custom_model" is your chosen identifier string - it can be anything
+   # This string will be used to connect your config to your model instantiation
+
+4. **Add hyperparameter search space** to ``Config.get_search_space()`` method using your identifier:
+
+.. code-block:: python
+
+   if base_model == 'my_custom_model':  # Must match your identifier from step 3
+       return {
+           "param1": trial.suggest_float("param1", 0.1, 1.0),
+           "param2": trial.suggest_int("param2", 10, 100),
+           "use_quant_feats": trial.suggest_categorical("use_quant_feats", [True, False]),
+           # Add your hyperparameters
+       }
+
+5. **Add model instantiation** in ``resource_prediction/training/hyperparameter.py`` in the ``_objective`` method:
+
+.. code-block:: python
+
+   # In the regression section (around line 129):
+   if base_model == 'my_custom_model':  # Must match your identifier
+       model = MyPredictor(
+           param1=params["param1"],
+           param2=params["param2"],
+           random_state=self.config.RANDOM_STATE
+       )
+   
+   # And/or in the classification section (around line 153):
+   elif base_model == 'my_custom_model':  # Must match your identifier  
+       model = MyPredictor(
+           param1=params["param1"],
+           param2=params["param2"],
+           random_state=self.config.RANDOM_STATE
+       )
+
+**Key Points:**
+
+- The ``base_model`` string (e.g., ``"my_custom_model"``) is just an identifier you choose
+- This string must be consistent across ``config.py``, ``get_search_space()``, and ``hyperparameter.py``
+- The training system uses explicit if-elif statements to map your string to your model class
+- Your model class name (e.g., ``MyPredictor``) can be different from your identifier string
+
+5. **Update command-line options** in ``main.py`` if needed (optional for most cases)
+
+The :class:`~resource_prediction.models.base.BasePredictor` interface ensures all models have consistent ``fit()`` and ``predict()`` methods, making them interchangeable throughout the system.
 
 **Customizing Business Logic**
 
@@ -238,3 +343,85 @@ Example Workflows
    python main.py --task-type regression --run-search --evaluate-all-archs
 
 This will generate performance comparisons and help select the best model for deployment.
+
+Interactive Web Application
+---------------------------
+
+The project includes a unified Streamlit-based web application for interactive model exploration and real-time prediction.
+
+**Main Application**
+
+.. code-block:: console
+
+   # Launch the main application
+   streamlit run app/app.py
+
+The main application provides a comprehensive interface with:
+
+- **Model Selection**: Radio button interface to choose between 4 different models:
+  
+  - **Classification** - XGBoost uncertainty model  
+  - **Quantile Ensemble** - Three variants:
+    
+    - Balanced Approach
+    - Tiny Under Allocation (optimized for failure prevention)
+    - Small Memory Waste (optimized for efficiency)
+
+- **Interactive Prediction**: Real-time memory prediction using simulation data
+- **Visualization**: Live charts showing prediction behavior over time
+- **Simulation Mode**: Automatic batch processing with configurable delay between predictions
+- **Model-Specific Interfaces**: Each model type has optimized display and interaction patterns
+
+**Application Architecture**
+
+The application uses a modular design:
+
+.. code-block:: text
+
+   app/
+   ├── app.py                     # Main Streamlit application
+   ├── utils.py                   # Shared utilities
+   ├── qe/                        # Quantile ensemble helper functions
+   │   ├── app_qe.py             # QE-specific functions (not standalone)
+   │   └── simulation_data.csv    # QE simulation data
+   └── classification/            # Classification helper functions  
+       ├── app_classification.py  # Classification functions (not standalone)
+       └── *.csv                 # Classification test data
+
+The main ``app.py`` imports functions from the helper modules and dynamically calls the appropriate one based on user selection:
+
+.. code-block:: python
+
+   # Main app imports helper functions
+   from classification.app_classification import run_classification
+   
+   # Calls appropriate function based on model selection
+   if model_choice == "Classification":
+       run_classification(model_path)
+   elif model_choice in quantile_ensemble_models:
+       run_qe(model_path)  # Defined in main app
+
+**Features**
+
+- **Real-time Prediction**: Memory prediction with live updates
+- **Model Comparison**: Easy switching between different approaches
+- **Simulation Visualization**: Charts showing prediction behavior
+- **Configurable Speed**: Adjustable delay between predictions
+- **Model-Specific UI**: Optimized interface for each model type
+
+**Trained Model Artifacts**
+
+Pre-trained models are organized in the ``artifacts/trained_models/`` directory:
+
+.. code-block:: text
+
+   artifacts/trained_models/
+   ├── app/                           # Models for web applications
+   │   ├── qe/                        # Quantile ensemble variants
+   │   │   ├── qe_balanced.pkl        # Balanced accuracy/efficiency
+   │   │   ├── qe_small_waste.pkl     # Optimized for minimal waste
+   │   │   └── qe_tiny_under_alloc.pkl # Optimized for failure prevention
+   │   └── classification/            # Classification models
+   └── resource_prediction/           # Models from training pipeline
+
+These applications demonstrate how to use the trained models in production-like scenarios and provide tools for stakeholders to understand model behavior without running the full training pipeline.

@@ -21,38 +21,8 @@ import xgboost as xgb
 import os
 import pickle
 
-class QEPredictor:
-    def __init__(self, *, alpha, safety, gb_p, xgb_p, seed=42):
-        self.alpha, self.safety = alpha, safety
-        self.gb  = GradientBoostingRegressor(
-            loss="quantile", alpha=alpha, random_state=seed, **gb_p)
-        base = dict(objective="reg:quantileerror",
-                    quantile_alpha=alpha, n_jobs=1, random_state=seed)
-        base.update(xgb_p)
-        self.xgb = xgb.XGBRegressor(**base)
-        self.cols = None
-
-    def _enc(self, X, fit=False):
-        Xd = pd.get_dummies(X, drop_first=True)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        if fit:
-            self.cols = Xd.columns
-        else:
-            miss = self.cols.difference(Xd.columns)
-            for c in miss: Xd[c] = 0
-            Xd = Xd[self.cols]
-        return Xd.astype(float)
-
-    def fit(self, X, y):
-        self.gb.fit(self._enc(X, True), y)
-        self.xgb.fit(self._enc(X), y, verbose=False)
-
-    def predict(self, X):
-        Xd = self._enc(X, False)
-        p  = np.maximum(self.gb.predict(Xd), self.xgb.predict(Xd))
-        return p * self.safety
-
+# Import the unified QEPredictor
+from resource_prediction.models import QEPredictor
 
 # --- Suppress Warnings ---
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -201,14 +171,14 @@ if model_choice != st.session_state.model_type:
     st.session_state.model_type = model_choice
     st.rerun()
 
-# --- Configuration ---
+# --- Configuration --- Updated to use artifacts directory
 MODEL_PATHS = {
-    "Regression": "regression/final_model.pkl",
-    "Classification": "classification/xgboost_uncertainty_model.pkl",
-    "Quantile-Ensemble": "qe_trial_32_55.pkl"
+    "Regression": "../../artifacts/trained_models/app/initial_approach/final_model.pkl",
+    "Classification": "../../artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl",
+    "Quantile-Ensemble": "../../artifacts/trained_models/app/qe/qe_balanced.pkl"  # Using balanced as default QE model
 }
 
-MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "regression/final_model.pkl")
+MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type, "../../artifacts/trained_models/app/initial_approach/final_model.pkl")
 
 if st.session_state.model_type == "Quantile-Ensemble":
     run_qe(MODEL_PAYLOAD_PATH)
