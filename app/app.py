@@ -6,9 +6,17 @@ import joblib
 import time
 import os
 import pickle
+import sys
 from collections import deque
 from sklearn.ensemble import GradientBoostingRegressor
 import xgboost as xgb
+
+# Add project root to Python path for proper imports
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from resource_prediction.models import QEPredictor
 from .classification.app_classification import run_classification
 from .utils import (setup_sidebar, setup_ui, run_simulation_loop)
@@ -20,12 +28,6 @@ def run_qe(MODEL_PAYLOAD_PATH):
 
     # Load the model 
     try:
-        # Add project root to Python path for proper imports
-        import sys
-        project_root = os.path.dirname(SCRIPT_DIR)
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-        
         # Import model classes to make them available for unpickling
         from resource_prediction.models import QEPredictor, QuantileEnsemblePredictor
         
@@ -93,9 +95,6 @@ if model_choice != st.session_state.model_type:
     st.rerun()
 
 # Configuration - Updated paths to use absolute paths
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-
 MODEL_PATHS = {
     CLASSIFICATION: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/classification/xgboost_uncertainty_model.pkl"),
     QE_BALANCED: os.path.join(PROJECT_ROOT, "artifacts/trained_models/app/qe/qe_balanced.pkl"),
