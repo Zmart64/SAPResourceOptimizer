@@ -152,7 +152,7 @@ app/                           # Interactive web applications
 
 ### Adding New Models
 
-The unified model architecture makes extending the system straightforward:
+The unified model architecture makes extending the system straightforward. Here's the complete process using an example `MyPredictor` model:
 
 1. **Create model implementation** extending `BasePredictor`:
    ```python
@@ -160,6 +160,10 @@ The unified model architecture makes extending the system straightforward:
    from .base import BasePredictor
    
    class MyPredictor(BasePredictor):
+       def __init__(self, param1=0.5, param2=50, **kwargs):
+           self.param1 = param1
+           self.param2 = param2
+           
        def fit(self, X, y, **fit_params):
            # Implementation
            pass
@@ -181,26 +185,52 @@ The unified model architecture makes extending the system straightforward:
    ]
    ```
 
-3. **Add to `Config.MODEL_FAMILIES`** in `resource_prediction/config.py`:
+3. **Choose a base_model identifier** and add to `Config.MODEL_FAMILIES` in `resource_prediction/config.py`:
    ```python
    MODEL_FAMILIES = {
        # Existing models...
-       "my_model_regression": {"type": "regression", "base_model": "my_model"},
-       "my_model_classification": {"type": "classification", "base_model": "my_model"},
+       "my_model_regression": {"type": "regression", "base_model": "my_custom_model"},
+       "my_model_classification": {"type": "classification", "base_model": "my_custom_model"},
    }
+   # Note: "my_custom_model" is your chosen identifier string - it can be anything
+   # This string will be used to connect your config to your model instantiation
    ```
 
-4. **Add hyperparameter search space** to `Config.get_search_space()` method in the same file:
+4. **Add hyperparameter search space** to `Config.get_search_space()` method using your identifier:
    ```python
-   if base_model == 'my_model':
+   if base_model == 'my_custom_model':  # Must match your identifier from step 3
        return {
            "param1": trial.suggest_float("param1", 0.1, 1.0),
            "param2": trial.suggest_int("param2", 10, 100),
+           "use_quant_feats": trial.suggest_categorical("use_quant_feats", [True, False]),
            # Add your hyperparameters
        }
    ```
 
-5. **Update command-line options** in `main.py` if needed (optional for most cases)
+5. **Add model instantiation** in `resource_prediction/training/hyperparameter.py` in the `_objective` method:
+   ```python
+   # In the regression section (around line 129):
+   if base_model == 'my_custom_model':  # Must match your identifier
+       model = MyPredictor(
+           param1=params["param1"],
+           param2=params["param2"],
+           random_state=self.config.RANDOM_STATE
+       )
+   
+   # And/or in the classification section (around line 153):
+   elif base_model == 'my_custom_model':  # Must match your identifier  
+       model = MyPredictor(
+           param1=params["param1"],
+           param2=params["param2"],
+           random_state=self.config.RANDOM_STATE
+       )
+   ```
+
+**Key Points:**
+- The `base_model` string (e.g., `"my_custom_model"`) is just an identifier you choose
+- This string must be consistent across `config.py`, `get_search_space()`, and `hyperparameter.py`  
+- The training system uses explicit if-elif statements to map your string to your model class
+- Your model class name (e.g., `MyPredictor`) can be different from your identifier string
 
 ### Customizing Business Logic
 
