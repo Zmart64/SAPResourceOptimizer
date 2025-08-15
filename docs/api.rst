@@ -52,7 +52,7 @@ Web Applications
 
 Interactive Streamlit applications for model exploration and prediction.
 
-.. automodule:: app.app
+.. automodule:: app
    :members:
    :undoc-members:
    :show-inheritance:

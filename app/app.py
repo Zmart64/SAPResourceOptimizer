@@ -2,23 +2,16 @@ import streamlit as st
 import altair as alt
 import pandas as pd
 import numpy as np
-import warnings
-import ast
-from collections import deque
-import streamlit as st
-import altair as alt
-import pandas as pd
-import numpy as np
-from resource_prediction.models import QEPredictor
 import joblib
 import time
+import os
+import pickle
 from collections import deque
 from sklearn.ensemble import GradientBoostingRegressor
 import xgboost as xgb
-import os
-import pickle
-from classification.app_classification import run_classification
-from utils import (setup_sidebar, setup_ui, run_simulation_loop)
+from resource_prediction.models import QEPredictor
+from .classification.app_classification import run_classification
+from .utils import (setup_sidebar, setup_ui, run_simulation_loop)
 
 def run_qe(MODEL_PAYLOAD_PATH):
     """Runs the app for the selected quantile ensemble model"""
