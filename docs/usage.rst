@@ -228,10 +228,41 @@ The unified architecture makes extending the system straightforward:
            # Your implementation
            pass
 
-2. **Register in model registry** (``resource_prediction/models/__init__.py``)
-3. **Add hyperparameter search space** to ``Config.get_search_space()``
-4. **Register in ``Config.MODEL_FAMILIES``** dictionary
-5. **Update command-line options** if needed
+2. **Register in model registry** (``resource_prediction/models/__init__.py``):
+
+.. code-block:: python
+
+   from .my_model import MyPredictor
+   
+   __all__ = [
+       "BasePredictor",
+       "QEPredictor", 
+       "QuantileEnsemblePredictor",
+       "MyPredictor"  # Add your new model
+   ]
+
+3. **Add to ``Config.MODEL_FAMILIES``** in ``resource_prediction/config.py``:
+
+.. code-block:: python
+
+   MODEL_FAMILIES = {
+       # Existing models...
+       "my_model_regression": {"type": "regression", "base_model": "my_model"},
+       "my_model_classification": {"type": "classification", "base_model": "my_model"},
+   }
+
+4. **Add hyperparameter search space** to ``Config.get_search_space()`` method:
+
+.. code-block:: python
+
+   if base_model == 'my_model':
+       return {
+           "param1": trial.suggest_float("param1", 0.1, 1.0),
+           "param2": trial.suggest_int("param2", 10, 100),
+           # Add your hyperparameters
+       }
+
+5. **Update command-line options** in ``main.py`` if needed (optional for most cases)
 
 The :class:`~resource_prediction.models.base.BasePredictor` interface ensures all models have consistent ``fit()`` and ``predict()`` methods, making them interchangeable throughout the system.
 
@@ -278,59 +309,75 @@ Example Workflows
 
 This will generate performance comparisons and help select the best model for deployment.
 
-Interactive Web Applications
-----------------------------
+Interactive Web Application
+---------------------------
 
-The project includes Streamlit-based web applications for interactive model exploration and real-time prediction.
+The project includes a unified Streamlit-based web application for interactive model exploration and real-time prediction.
 
-**Main Dashboard**
+**Main Application**
 
 .. code-block:: console
 
-   # Launch the main application dashboard
+   # Launch the main application
    streamlit run app/app.py
 
-The main dashboard provides access to all available model applications and allows comparison between different approaches.
+The main application provides a comprehensive interface with:
 
-**Quantile Ensemble Application**
+- **Model Selection**: Radio button interface to choose between 5 different models:
+  
+  - **Initial Approach** - Classification model
+  - **Classification** - XGBoost uncertainty model  
+  - **Quantile Ensemble** - Three variants:
+    
+    - Balanced Approach
+    - Tiny Under Allocation (optimized for failure prevention)
+    - Small Memory Waste (optimized for efficiency)
 
-.. code-block:: console
+- **Interactive Prediction**: Real-time memory prediction using simulation data
+- **Visualization**: Live charts showing prediction behavior over time
+- **Simulation Mode**: Automatic batch processing with configurable delay between predictions
+- **Model-Specific Interfaces**: Each model type has optimized display and interaction patterns
 
-   # Run the quantile ensemble specific application
-   streamlit run app/qe/app_qe.py
+**Application Architecture**
 
-Features:
+The application uses a modular design:
 
-- **Interactive Prediction**: Real-time memory prediction with adjustable build parameters
-- **Model Variants**: Choose between different QE model configurations (balanced, small waste, tiny under-allocation)
-- **Simulation Mode**: Batch prediction capabilities with CSV data
-- **Visualization**: Real-time charts showing prediction behavior and confidence intervals
+.. code-block:: text
 
-**Classification Application**
+   app/
+   ├── app.py                     # Main Streamlit application
+   ├── utils.py                   # Shared utilities
+   ├── qe/                        # Quantile ensemble helper functions
+   │   ├── app_qe.py             # QE-specific functions (not standalone)
+   │   └── simulation_data.csv    # QE simulation data
+   ├── classification/            # Classification helper functions  
+   │   ├── app_classification.py  # Classification functions (not standalone)
+   │   └── *.csv                 # Classification test data
+   └── initial_approach/          # Initial approach helper functions
+       ├── app_regression.py      # Regression functions (not standalone)
+       └── simulation_data.csv    # Regression simulation data
 
-.. code-block:: console
-
-   # Run the classification model application
-   streamlit run app/classification/app_classification.py
-
-Features:
-
-- **Memory Bin Prediction**: Classify builds into memory requirement categories
-- **Uncertainty Quantification**: Prediction confidence and uncertainty estimates
-- **Feature Analysis**: Understand which features drive predictions
-- **Comparison Tools**: Compare classification vs regression approaches
-
-**Application Structure**
-
-The web applications use the unified model architecture:
+The main ``app.py`` imports functions from the helper modules and dynamically calls the appropriate one based on user selection:
 
 .. code-block:: python
 
-   # Applications import models consistently
-   from resource_prediction.models import QEPredictor
+   # Main app imports helper functions
+   from initial_approach.app_regression import run_regression
+   from classification.app_classification import run_classification
    
-   # Load trained models from artifacts directory
-   model = joblib.load('artifacts/trained_models/app/qe/qe_balanced.pkl')
+   # Calls appropriate function based on model selection
+   if model_choice == "Classification":
+       run_classification(model_path)
+   elif model_choice in quantile_ensemble_models:
+       run_qe(model_path)  # Defined in main app
+
+**Features**
+
+- **Real-time Prediction**: Memory prediction with live updates
+- **Model Comparison**: Easy switching between different approaches
+- **Simulation Visualization**: Charts showing prediction behavior
+- **Configurable Speed**: Adjustable delay between predictions
+- **Model-Specific UI**: Optimized interface for each model type
 
 **Trained Model Artifacts**
 

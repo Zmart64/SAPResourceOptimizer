@@ -170,17 +170,38 @@ The unified model architecture makes extending the system straightforward:
            pass
    ```
 
-2. **Register in model registry**:
+2. **Register in model registry** (`resource_prediction/models/__init__.py`):
    ```python
-   # resource_prediction/models/__init__.py
    from .my_model import MyPredictor
    
-   __all__ = ["BasePredictor", "QEPredictor", "MyPredictor"]
+   __all__ = [
+       "BasePredictor",
+       "QEPredictor",
+       "QuantileEnsemblePredictor",
+       "MyPredictor"  # Add your new model
+   ]
    ```
 
-3. **Add hyperparameter search space** to `Config.get_search_space()`
-4. **Register in `Config.MODEL_FAMILIES`** dictionary
-5. **Update command-line options** if needed
+3. **Add to `Config.MODEL_FAMILIES`** in `resource_prediction/config.py`:
+   ```python
+   MODEL_FAMILIES = {
+       # Existing models...
+       "my_model_regression": {"type": "regression", "base_model": "my_model"},
+       "my_model_classification": {"type": "classification", "base_model": "my_model"},
+   }
+   ```
+
+4. **Add hyperparameter search space** to `Config.get_search_space()` method in the same file:
+   ```python
+   if base_model == 'my_model':
+       return {
+           "param1": trial.suggest_float("param1", 0.1, 1.0),
+           "param2": trial.suggest_int("param2", 10, 100),
+           # Add your hyperparameters
+       }
+   ```
+
+5. **Update command-line options** in `main.py` if needed (optional for most cases)
 
 ### Customizing Business Logic
 
@@ -188,21 +209,23 @@ The unified model architecture makes extending the system straightforward:
 - Adjust the 5:1 penalty ratio for under vs over-allocation  
 - Add new metrics (SLA compliance, cost thresholds, etc.)
 
-### Interactive Applications
+### Interactive Web Application
 
-The project includes Streamlit web applications for model exploration:
+The project includes a unified Streamlit web application for model exploration:
 
 ```console
-# Run the main dashboard
+# Launch the main application (only one needed)
 streamlit run app/app.py
-
-# Run specific model applications
-streamlit run app/qe/app_qe.py
-streamlit run app/classification/app_classification.py
 ```
 
-These applications provide:
-- **Interactive Prediction**: Real-time memory prediction with adjustable parameters
-- **Model Comparison**: Side-by-side performance analysis
-- **Simulation Mode**: Batch prediction capabilities
-- **Visualization**: Charts and metrics for model behavior analysis
+The application features:
+- **Model Selection**: Radio button interface to choose between 5 different models:
+  - Initial Approach (Classification)
+  - Classification
+  - Quantile Ensemble (3 variants: Balanced, Tiny Under-allocation, Small Waste)
+- **Interactive Prediction**: Real-time memory prediction with simulation data
+- **Visualization**: Live charts showing prediction behavior over time
+- **Simulation Mode**: Automatic batch processing with configurable delay
+- **Model-Specific Interfaces**: Each model type has its own optimized interface
+
+The app dynamically loads the appropriate model and configuration based on user selection, with helper modules in the subdirectories (`app/qe/`, `app/classification/`, `app/initial_approach/`) providing model-specific functionality.
