@@ -41,5 +41,4 @@ wheels/
 .installed.cfg
 *.egg
 
-# output
-artifacts/
+*rf_classification.pkl

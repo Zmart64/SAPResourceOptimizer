@@ -19,7 +19,7 @@ class Config:
     ALLOCATION_PLOT_PATH = OUTPUT_DIR / "memory_allocation_plot.png"
     ALLOCATION_SUMMARY_REPORT_PATH = OUTPUT_DIR / "allocation_summary_report.csv"
 
-    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-sorted.csv"
+    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-4.csv"
     PROCESSED_DATA_DIR = DATA_DIR / "processed"
     BASELINE_STATS_PATH = PROCESSED_DATA_DIR / "baseline_allocation_stats.pkl"
     X_TRAIN_PATH = PROCESSED_DATA_DIR / "X_train.pkl"
