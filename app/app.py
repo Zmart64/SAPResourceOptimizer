@@ -29,7 +29,7 @@ from data_loader import load_unified_simulation_data, get_target_columns
 def run_classification(model_path):
     """Runs the app for the classification model"""
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    SUMMARY_FILE = os.path.join(SCRIPT_DIR, 'classification/best_strategy_summary_xgboost_10.csv')
+    SUMMARY_FILE = os.path.join(SCRIPT_DIR, 'best_strategy_summary_xgboost_10.csv')
 
     # Load the unified simulation data
     simulation_df = load_unified_simulation_data()
@@ -121,51 +121,6 @@ def run_qe(model_path):
             model = model_data['model']
         else:
             model = model_data
-        
-        # Handle backward compatibility: older models may have 'cols' instead of 'columns'
-        if hasattr(model, 'cols') and not hasattr(model, 'columns'):
-            model.columns = model.cols
-            
-    except Exception as e:
-        st.error(f"FATAL: Could not load model. Error: {e}")
-        st.stop()
-
-    # Get predictions
-    try:
-        predictions = model.predict(simulation_df)
-    except Exception as e:
-        st.error(f"Error making predictions: {e}")
-        st.stop()
-
-    # Get target column names
-    target_cols = get_target_columns()
-
-    # Streamlit setup
-    delay_seconds = setup_sidebar("Quantile Ensemble")
-    summary_ph, output_ph, chart_ph = setup_ui(st.session_state.model_type)
-
-    def predict_fn(row, idx):
-        return predictions[idx], None  # no class for QE
-
-    run_simulation_loop(simulation_df, predict_fn,
-                        actual_col=target_cols['actual_col'],
-                        memreq_col=target_cols['memreq_col'],
-                        summary_placeholder=summary_ph,
-                        output_placeholder=output_ph,
-                        chart_placeholder=chart_ph,
-                        delay_seconds=delay_seconds,
-                        show_class=False)
-    """Runs the app for the selected quantile ensemble model"""
-    
-    # Load the unified simulation data
-    simulation_df = load_unified_simulation_data()
-    if simulation_df is None:
-        st.error("Failed to load simulation data. Please ensure data preprocessing has been completed.")
-        st.stop()
-    
-    # Load the model 
-    try:
-        model = joblib.load(model_path)
         
         # Handle backward compatibility: older models may have 'cols' instead of 'columns'
         if hasattr(model, 'cols') and not hasattr(model, 'columns'):
