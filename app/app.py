@@ -47,35 +47,55 @@ def run_classification(model_path, model_name):
 
     # Make predictions using the model
     try:
-        # Use all available features from the model that exist in simulation data
-        # Create feature mapping for compatibility
-        feature_mapping = {}
-        
-        # Map some common feature name variations
-        if 'lag_max_rss_g1_w1' in simulation_df.columns and 'lag_max_rss_global_w5' in model_features:
-            feature_mapping['lag_max_rss_global_w5'] = 'lag_max_rss_g1_w1'
-        
-        # Select features that are available in both model and simulation data
-        available_features = []
-        for feature in model_features:
-            if feature in simulation_df.columns:
-                available_features.append(feature)
-            elif feature in feature_mapping and feature_mapping[feature] in simulation_df.columns:
-                available_features.append(feature)
-        
-        # Prepare features for prediction
+        # Prepare features for prediction by handling one-hot encoding
         X_test = simulation_df.copy()
         
-        # Apply feature mapping
-        for model_feature, sim_feature in feature_mapping.items():
-            if model_feature in model_features and sim_feature in X_test.columns:
-                X_test[model_feature] = X_test[sim_feature]
+        # Apply one-hot encoding for categorical features that the model expects
+        categorical_features = ['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt']
         
-        # Select only the features the model expects
-        X_test = X_test[available_features]
+        for cat_feature in categorical_features:
+            if cat_feature in X_test.columns:
+                # Get dummies for the categorical feature
+                dummies = pd.get_dummies(X_test[cat_feature], prefix=cat_feature, dtype=int)
+                
+                # Add dummy columns to X_test
+                for dummy_col in dummies.columns:
+                    X_test[dummy_col] = dummies[dummy_col]
+        
+        # Add feature mapping for compatibility
+        if 'lag_max_rss_g1_w1' in X_test.columns and 'lag_max_rss_global_w5' not in X_test.columns:
+            X_test['lag_max_rss_global_w5'] = X_test['lag_max_rss_g1_w1']
+        
+        # Handle missing one-hot encoded features by creating them with zeros
+        for feature in model_features:
+            if feature not in X_test.columns:
+                # Check if it's a one-hot encoded categorical feature
+                for cat_prefix in ['location_', 'component_', 'makeType_', 'bp_arch_', 'bp_compiler_', 'bp_opt_']:
+                    if feature.startswith(cat_prefix):
+                        X_test[feature] = 0
+                        break
+        
+        # Select features that are available in both model and processed data
+        available_features = [f for f in model_features if f in X_test.columns]
+        
+        print(f"Using {len(available_features)}/{len(model_features)} model features")
+        
+        if len(available_features) < len(model_features) * 0.5:  # Require at least 50% of features
+            st.error(f"Too few matching features: {len(available_features)}/{len(model_features)}")
+            st.stop()
+        
+        # Select only the features the model expects and ensure correct order
+        X_test_model = X_test[model_features].copy()
+        
+        # Convert categorical columns to numeric if needed for prediction
+        for col in X_test_model.columns:
+            if X_test_model[col].dtype.name == 'category':
+                X_test_model[col] = X_test_model[col].astype(float)
+        
+        X_test_model = X_test_model.fillna(0)
         
         # Make predictions
-        y_pred_probs = model.predict_proba(X_test)
+        y_pred_probs = model.predict_proba(X_test_model)
         y_pred_classes = np.argmax(y_pred_probs, axis=1)
         preds = []
         for i, probs in enumerate(y_pred_probs):
