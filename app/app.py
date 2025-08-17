@@ -54,9 +54,9 @@ def run_classification(model_path):
     # Make predictions using the model
     try:
         # Extract the features needed for classification model
-        feature_cols = ["bp_arch", "bp_compiler", "bp_opt", "component", "makeType", 
-                       "target_cnt", "lag_1_grouped", "rolling_p95_rss_g1_w5", 
-                       "jobs", "localJobs"]
+        # Order must match the original training data
+        feature_cols = ["bp_arch", "bp_compiler", "bp_opt", "target_cnt", "lag_max_rss_g1_w1", 
+                       "rolling_p95_rss_g1_w5", "component", "makeType", "jobs", "localJobs"]
         
         # Filter to only the columns that exist in simulation_df and are needed
         available_cols = [col for col in feature_cols if col in simulation_df.columns]

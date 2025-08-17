@@ -65,6 +65,10 @@ class UnifiedDataLoader:
             simulation_df[self.config.TARGET_COLUMN_PROCESSED] = y_test[self.config.TARGET_COLUMN_PROCESSED].reset_index(drop=True)
             simulation_df['memreq_gb'] = df_test_raw['memreq_gb'].reset_index(drop=True)
             
+            # Add backward compatibility for classification model feature names
+            if 'lag_1_grouped' in simulation_df.columns:
+                simulation_df['lag_max_rss_g1_w1'] = simulation_df['lag_1_grouped']
+            
             # Add categorical dtype conversion for streamlit compatibility
             categorical_cols = [
                 "bp_arch", "bp_compiler", "bp_opt", "component", "makeType",
