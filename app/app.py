@@ -1,20 +1,15 @@
 import streamlit as st
-import altair as alt
 import pandas as pd
 import numpy as np
 import joblib
-import time
 import os
 import sys
-from collections import deque
 
 # Add project root to Python path for proper imports
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-
-from resource_prediction.models import QuantileEnsemblePredictor
 
 # Now add the app directory to import app modules
 APP_DIR = SCRIPT_DIR
