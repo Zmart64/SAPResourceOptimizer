@@ -24,7 +24,7 @@ def create_focused_pareto_plot():
     config = Config()
     
     # Load Pareto frontier points
-    pareto_df = pd.read_csv(config.OUTPUT_DIR / "pareto_frontier_points.csv")
+    pareto_df = pd.read_csv(config.PROJECT_ROOT / "artifacts" / "pareto" / "results" / "pareto_frontier_points.csv")
     
     # Identify the three key points
     min_waste_idx = pareto_df['total_over_pct'].idxmin()
@@ -107,7 +107,7 @@ def create_focused_pareto_plot():
     plt.tight_layout()
     
     # Save the plot
-    plot_path = config.OUTPUT_DIR / "pareto_focused_plot.png"
+    plot_path = config.PROJECT_ROOT / "artifacts" / "pareto" / "plots" / "pareto_focused_plot.png"
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"\nFocused Pareto plot saved to: {plot_path}")
     
@@ -135,7 +135,7 @@ def create_and_save_models(key_points):
     print(f"Base model: α={base_model.alpha:.3f}, safety={base_model.safety:.3f}")
     
     # Create artifacts subfolder for the three models
-    models_subfolder = config.PROJECT_ROOT / "artifacts" / "pareto_models"
+    models_subfolder = config.PROJECT_ROOT / "artifacts" / "pareto" / "models"
     models_subfolder.mkdir(exist_ok=True)
     
     # Extract base model parameters

@@ -265,9 +265,9 @@ class ParetoFrontierAnalyzer:
     def save_results(self, results_path=None, pareto_path=None):
         """Save analysis results to CSV files."""
         if results_path is None:
-            results_path = self.config.OUTPUT_DIR / "pareto_frontier_results.csv"
+            results_path = self.config.PROJECT_ROOT / "artifacts" / "pareto" / "results" / "pareto_frontier_results.csv"
         if pareto_path is None:
-            pareto_path = self.config.OUTPUT_DIR / "pareto_frontier_points.csv"
+            pareto_path = self.config.PROJECT_ROOT / "artifacts" / "pareto" / "results" / "pareto_frontier_points.csv"
             
         # Save all results
         self.results_df.to_csv(results_path, index=False)
@@ -363,10 +363,10 @@ def main():
     results_path, pareto_path = analyzer.save_results()
     
     # Create and save plots
-    plot_path = config.OUTPUT_DIR / "pareto_frontier_plot.png"
+    plot_path = config.PROJECT_ROOT / "artifacts" / "pareto" / "plots" / "pareto_frontier_plot.png"
     analyzer.plot_pareto_frontier(save_path=plot_path)
     
-    print(f"\nAnalysis complete! Results saved to {config.OUTPUT_DIR}")
+    print(f"\nAnalysis complete! Results saved to {config.PROJECT_ROOT / 'artifacts' / 'pareto'}")
     print(f"- All results: {results_path}")
     print(f"- Pareto points: {pareto_path}")
     print(f"- Visualization: {plot_path}")

@@ -19,8 +19,8 @@ def analyze_results():
     config = Config()
     
     # Load results
-    results_path = config.OUTPUT_DIR / "pareto_frontier_results.csv"
-    pareto_path = config.OUTPUT_DIR / "pareto_frontier_points.csv"
+    results_path = config.PROJECT_ROOT / "artifacts" / "pareto" / "results" / "pareto_frontier_results.csv"
+    pareto_path = config.PROJECT_ROOT / "artifacts" / "pareto" / "results" / "pareto_frontier_points.csv"
     
     if not results_path.exists():
         print(f"Results file not found: {results_path}")
