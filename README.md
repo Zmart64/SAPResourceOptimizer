@@ -34,6 +34,32 @@ poetry shell
 poetry run python --version
 ```
 
+### Using Models (New Unified Interface)
+
+The project now provides a unified interface for all model types, eliminating the need for model-specific preprocessing:
+
+```python
+from resource_prediction.models import load_any_model
+
+# Load any model type with consistent interface
+model = load_any_model("artifacts/trained_models/lightgbm_classification.pkl")
+
+# Make predictions on raw data (no preprocessing needed!)
+predictions = model.predict(raw_dataframe)
+
+# Get model information  
+model_info = model.get_model_info()
+print(f"Model: {model_info['model_type']} ({model_info['task_type']})")
+```
+
+**Benefits of Unified Interface:**
+- 🔄 **Single interface** for all model types (classification, regression, QE)
+- 🧠 **Automatic preprocessing** - no manual feature engineering required
+- 🏗️ **Easy integration** - works seamlessly with existing and new models
+- 📦 **Backward compatible** - legacy models continue to work
+
+See [docs/unified_models.md](docs/unified_models.md) for comprehensive documentation.
+
 ### Documentation
 
 Full project documentation is available in the `docs/` directory. To build and view the documentation locally:

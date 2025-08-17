@@ -18,9 +18,11 @@ if APP_DIR not in sys.path:
 
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 from data_loader import load_unified_simulation_data, get_target_columns
+from resource_prediction.models import load_any_model
 
-def run_classification(model_path, model_name):
-    """Runs the app for the classification model"""
+
+def run_unified_model(model_path, model_name, confidence_threshold=0.6):
+    """Runs the app for any unified model type"""
     
     # Load the unified simulation data
     simulation_df = load_unified_simulation_data()
@@ -28,77 +30,44 @@ def run_classification(model_path, model_name):
         st.error("Failed to load simulation data. Please ensure data preprocessing has been completed.")
         st.stop()
 
-    # Load the new model (dictionary format)
+    # Load the unified model
     try:
-        model_data = joblib.load(model_path)
-        model = model_data['model']
-        BIN_EDGES_GB = model_data['bin_edges'].tolist()
-        model_features = model_data['features']
-        num_classes = len(model.classes_)
-        CONF_THRESH = 0.6  # Default confidence threshold
+        unified_model = load_any_model(model_path)
+        model_info = unified_model.get_model_info()
+        
+        # For classification models, extract bin edges for UI
+        if unified_model.task_type == 'classification':
+            BIN_EDGES_GB = model_info.get('bin_edges', [])
+        else:
+            # For regression models, create reasonable bin edges for UI display
+            target_col = get_target_columns()['actual_col']
+            if target_col in simulation_df.columns:
+                min_val = simulation_df[target_col].min()
+                max_val = simulation_df[target_col].max()
+                BIN_EDGES_GB = np.linspace(min_val, max_val, 6).tolist()
+            else:
+                BIN_EDGES_GB = [0, 1, 2, 4, 8, 16]  # Default values
+                
     except Exception as e:
-        st.error(f"FATAL: Could not load model or config. Error: {e}")
+        st.error(f"FATAL: Could not load model. Error: {e}")
         st.stop()
 
-    # Make predictions using the model
+    # Make predictions using the unified interface
     try:
-        # Prepare features for prediction by handling one-hot encoding
-        X_test = simulation_df.copy()
+        # The unified model handles all preprocessing internally
+        predictions = unified_model.predict(simulation_df, confidence_threshold=confidence_threshold)
+        simulation_df['predictions'] = predictions
         
-        # Apply one-hot encoding for categorical features that the model expects
-        categorical_features = ['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt']
-        
-        for cat_feature in categorical_features:
-            if cat_feature in X_test.columns:
-                # Get dummies for the categorical feature
-                dummies = pd.get_dummies(X_test[cat_feature], prefix=cat_feature, dtype=int)
-                
-                # Add dummy columns to X_test
-                for dummy_col in dummies.columns:
-                    X_test[dummy_col] = dummies[dummy_col]
-        
-        # Add feature mapping for compatibility
-        if 'lag_max_rss_g1_w1' in X_test.columns and 'lag_max_rss_global_w5' not in X_test.columns:
-            X_test['lag_max_rss_global_w5'] = X_test['lag_max_rss_g1_w1']
-        
-        # Handle missing one-hot encoded features by creating them with zeros
-        for feature in model_features:
-            if feature not in X_test.columns:
-                # Check if it's a one-hot encoded categorical feature
-                for cat_prefix in ['location_', 'component_', 'makeType_', 'bp_arch_', 'bp_compiler_', 'bp_opt_']:
-                    if feature.startswith(cat_prefix):
-                        X_test[feature] = 0
-                        break
-        
-        # Select features that are available in both model and processed data
-        available_features = [f for f in model_features if f in X_test.columns]
-        
-        print(f"Using {len(available_features)}/{len(model_features)} model features")
-        
-        if len(available_features) < len(model_features) * 0.5:  # Require at least 50% of features
-            st.error(f"Too few matching features: {len(available_features)}/{len(model_features)}")
-            st.stop()
-        
-        # Select only the features the model expects and ensure correct order
-        X_test_model = X_test[model_features].copy()
-        
-        # Convert categorical columns to numeric if needed for prediction
-        for col in X_test_model.columns:
-            if X_test_model[col].dtype.name == 'category':
-                X_test_model[col] = X_test_model[col].astype(float)
-        
-        X_test_model = X_test_model.fillna(0)
-        
-        # Make predictions
-        y_pred_probs = model.predict_proba(X_test_model)
-        y_pred_classes = np.argmax(y_pred_probs, axis=1)
-        preds = []
-        for i, probs in enumerate(y_pred_probs):
-            pred = y_pred_classes[i]
-            if probs[pred] < CONF_THRESH:
-                pred = min(pred + 1, num_classes - 1)
-            preds.append(pred)
-        simulation_df['predicted_class'] = preds
+        # For classification models, also store predicted classes for display
+        if unified_model.task_type == 'classification':
+            # Reverse engineer class from allocation using bin edges
+            bin_edges = np.array(unified_model.bin_edges)
+            predicted_classes = []
+            for pred in predictions:
+                # Find which bin edge this prediction corresponds to
+                class_idx = np.searchsorted(bin_edges[1:], pred, side='right')
+                predicted_classes.append(class_idx)
+            simulation_df['predicted_class'] = predicted_classes
         
     except Exception as e:
         st.error(f"Error making predictions: {e}")
@@ -112,9 +81,13 @@ def run_classification(model_path, model_name):
     summary_ph, output_ph, chart_ph = setup_ui(st.session_state.model_type)
 
     def predict_fn(row, _):
-        pred_class = row["predicted_class"]
-        alloc = BIN_EDGES_GB[min(pred_class + 1, len(BIN_EDGES_GB) - 1)]
-        return alloc, pred_class
+        """Prediction function for the simulation loop"""
+        allocation = row["predictions"]
+        predicted_class = row.get("predicted_class", 0) if unified_model.task_type == 'classification' else 0
+        return allocation, predicted_class
+
+    # Show classification classes only for classification models
+    show_class = unified_model.task_type == 'classification'
 
     run_simulation_loop(simulation_df, predict_fn,
                         actual_col=target_cols['actual_col'],
@@ -123,102 +96,90 @@ def run_classification(model_path, model_name):
                         output_placeholder=output_ph,
                         chart_placeholder=chart_ph,
                         delay_seconds=delay_seconds,
-                        show_class=True)
+                        show_class=show_class)
+
+# Legacy function kept for backward compatibility - now uses unified interface
+def run_classification(model_path, model_name):
+    """Runs the app for classification models (legacy interface)"""
+    return run_unified_model(model_path, model_name, confidence_threshold=0.6)
 
 
+# Legacy function kept for backward compatibility - now uses unified interface  
 def run_qe(model_path):
-    """Runs the app for the selected quantile ensemble model"""
+    """Runs the app for QE models (legacy interface)"""
+    model_name = f"QE Model ({model_path.split('/')[-1].replace('.pkl', '')})"
+    return run_unified_model(model_path, model_name, confidence_threshold=0.6)
+
+
+def main():
+    """Main Streamlit application entry point"""
     
-    # Load the unified simulation data
-    simulation_df = load_unified_simulation_data()
-    if simulation_df is None:
-        st.error("Failed to load simulation data. Please ensure data preprocessing has been completed.")
-        st.stop()
+    st.set_page_config(
+        page_title="Resource Prediction App",
+        page_icon="🧠",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    # Load the model 
+    st.title("🧠 Memory Allocation Prediction App")
+    st.markdown("---")
+    
+    # Model selection in sidebar
+    st.sidebar.title("Model Selection")
+    
+    # Available models configuration
+    available_models = {
+        "LightGBM Classification": "artifacts/trained_models/lightgbm_classification.pkl",
+        "XGBoost Classification": "artifacts/trained_models/xgboost_classification.pkl", 
+        "QE Balanced": "artifacts/pareto/models/qe_balanced.pkl",
+        "QE Low Waste": "artifacts/pareto/models/qe_low_waste.pkl",
+        "QE Low Underallocation": "artifacts/pareto/models/qe_low_underallocation.pkl"
+    }
+    
+    # Model selection
+    selected_model = st.sidebar.selectbox(
+        "Choose a model:",
+        list(available_models.keys()),
+        index=0
+    )
+    
+    # Store model selection in session state
+    if "model_type" not in st.session_state:
+        st.session_state.model_type = selected_model
+    
+    if st.session_state.model_type != selected_model:
+        st.session_state.model_type = selected_model
+        st.rerun()
+    
+    # Get model path
+    model_path = os.path.join(PROJECT_ROOT, available_models[selected_model])
+    
+    # Display model information
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"**Selected Model:** {selected_model}")
+    
     try:
-        model_data = joblib.load(model_path)
+        # Load model info for display
+        unified_model = load_any_model(model_path)
+        model_info = unified_model.get_model_info()
         
-        # Handle new Pareto models which are saved as dictionaries
-        if isinstance(model_data, dict) and 'model' in model_data:
-            model = model_data['model']
-        else:
-            model = model_data
+        st.sidebar.markdown(f"**Model Type:** {model_info['model_type']}")
+        st.sidebar.markdown(f"**Task Type:** {model_info['task_type']}")
+        st.sidebar.markdown(f"**Features:** {model_info['num_features']}")
         
-        # Handle backward compatibility: older models may have 'cols' instead of 'columns'
-        if hasattr(model, 'cols') and not hasattr(model, 'columns'):
-            model.columns = model.cols
+        if 'num_classes' in model_info:
+            st.sidebar.markdown(f"**Classes:** {model_info['num_classes']}")
             
     except Exception as e:
-        st.error(f"FATAL: Could not load model. Error: {e}")
-        st.stop()
-
-    # Get predictions
+        st.sidebar.error(f"Error loading model info: {e}")
+    
+    # Run the selected model
     try:
-        predictions = model.predict(simulation_df)
+        run_unified_model(model_path, selected_model)
     except Exception as e:
-        st.error(f"Error making predictions: {e}")
+        st.error(f"Error running model: {e}")
         st.stop()
 
-    # Get target column names
-    target_cols = get_target_columns()
 
-    # Streamlit setup
-    delay_seconds = setup_sidebar("Quantile Ensemble")
-    summary_ph, output_ph, chart_ph = setup_ui(st.session_state.model_type)
-
-    def predict_fn(row, idx):
-        return predictions[idx], None  # no class for QE
-
-    run_simulation_loop(simulation_df, predict_fn,
-                        actual_col=target_cols['actual_col'],
-                        memreq_col=target_cols['memreq_col'],
-                        summary_placeholder=summary_ph,
-                        output_placeholder=output_ph,
-                        chart_placeholder=chart_ph,
-                        delay_seconds=delay_seconds,
-                        show_class=False)
-
-
-# Define the models the user can choose from 
-CLASSIFICATION_LIGHTGBM = "LightGBM Classification"
-CLASSIFICATION_XGBOOST = "XGBoost Classification"
-QE_BALANCED = "Quantile-Ensemble - Balanced Approach"
-QE_TINY_UNDER_ALLOC = "Quantile-Ensemble - Tiny Under Allocation"
-QE_SMALL_WASTE = "Quantile-Ensemble - Small Memory Waste"
-
-st.set_page_config(layout="wide")
-
-# Initialize session state with default model
-if "model_type" not in st.session_state:
-    st.session_state.model_type = CLASSIFICATION_LIGHTGBM
-
-# Sidebar model selector
-st.sidebar.header("Model Selection")
-model_choice = st.sidebar.radio("Choose prediction model:", 
-                                [CLASSIFICATION_LIGHTGBM, CLASSIFICATION_XGBOOST, QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE], 
-                                index=0)
-
-# If changed, update session state and rerun
-if model_choice != st.session_state.model_type:
-    st.session_state.model_type = model_choice
-    st.rerun()
-
-# Configuration - Updated to use new classification models and Pareto frontier QE models
-MODEL_PATHS = {
-    CLASSIFICATION_LIGHTGBM: os.path.join(PROJECT_ROOT, "artifacts/trained_models/lightgbm_classification.pkl"),
-    CLASSIFICATION_XGBOOST: os.path.join(PROJECT_ROOT, "artifacts/trained_models/xgboost_classification.pkl"),
-    QE_BALANCED: os.path.join(PROJECT_ROOT, "artifacts/pareto/models/qe_balanced.pkl"),
-    QE_TINY_UNDER_ALLOC: os.path.join(PROJECT_ROOT, "artifacts/pareto/models/qe_low_underallocation.pkl"),
-    QE_SMALL_WASTE: os.path.join(PROJECT_ROOT, "artifacts/pareto/models/qe_low_waste.pkl"),
-}
-
-MODEL_PAYLOAD_PATH = MODEL_PATHS.get(st.session_state.model_type)
-
-# Depending on the model run the required function
-if st.session_state.model_type == CLASSIFICATION_LIGHTGBM:
-    run_classification(MODEL_PAYLOAD_PATH, "LightGBM Classification")
-elif st.session_state.model_type == CLASSIFICATION_XGBOOST:
-    run_classification(MODEL_PAYLOAD_PATH, "XGBoost Classification")
-elif st.session_state.model_type in (QE_BALANCED, QE_TINY_UNDER_ALLOC, QE_SMALL_WASTE):
-    run_qe(MODEL_PAYLOAD_PATH)
+if __name__ == "__main__":
+    main()

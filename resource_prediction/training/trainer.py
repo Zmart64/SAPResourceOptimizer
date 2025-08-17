@@ -18,6 +18,7 @@ import lightgbm as lgb
 
 from resource_prediction.config import Config
 from resource_prediction.training.hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
+from resource_prediction.models import UnifiedModelWrapper
 from resource_prediction.reporting import plot_allocation_comparison, generate_summary_report, calculate_allocation_categories
 
 
@@ -280,9 +281,29 @@ class Trainer:
 
         if save_model:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
+            
+            # Create unified wrapper for the model
+            if base_model_name == 'quantile_ensemble':
+                # For QE models, create wrapper from the model object
+                unified_model = UnifiedModelWrapper.from_qe_model(model, features)
+            else:
+                # For classification models, create wrapper from dictionary format
+                unified_model = UnifiedModelWrapper(
+                    model=model,
+                    model_type=base_model_name,
+                    task_type=task_type,
+                    features=features,
+                    bin_edges=bin_edges
+                )
+            
+            # Save unified wrapper
+            unified_model.save(config.MODELS_DIR / f"{family_name}.pkl")
+            
+            # Also save legacy format for backward compatibility (temporary)
             joblib.dump({'model': model, 'bin_edges': bin_edges,
-                        'features': features}, config.MODELS_DIR / f"{family_name}.pkl")
-            print(f"Saved model artifact for '{family_name}'")
+                        'features': features}, config.MODELS_DIR / f"{family_name}_legacy.pkl")
+            
+            print(f"Saved unified model artifact for '{family_name}'")
 
         model_alloc_stats = calculate_allocation_categories(
             name=family_name, allocations=alloc, true_values=y_test_gb.values)
