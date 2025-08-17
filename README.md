@@ -39,10 +39,10 @@ poetry run python --version
 The project now provides a unified interface for all model types, eliminating the need for model-specific preprocessing:
 
 ```python
-from resource_prediction.models import load_any_model
+from resource_prediction.models import load_model
 
 # Load any model type with consistent interface
-model = load_any_model("artifacts/trained_models/lightgbm_classification.pkl")
+model = load_model("artifacts/trained_models/lightgbm_classification.pkl")
 
 # Make predictions on raw data (no preprocessing needed!)
 predictions = model.predict(raw_dataframe)
@@ -57,8 +57,6 @@ print(f"Model: {model_info['model_type']} ({model_info['task_type']})")
 - 🧠 **Automatic preprocessing** - no manual feature engineering required
 - 🏗️ **Easy integration** - works seamlessly with existing and new models
 - 📦 **Backward compatible** - legacy models continue to work
-
-See [docs/unified_models.md](docs/unified_models.md) for comprehensive documentation.
 
 ### Documentation
 
