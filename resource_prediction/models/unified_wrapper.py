@@ -211,7 +211,11 @@ class UnifiedModelWrapper:
             info['num_classes'] = len(self.bin_edges) - 1
         
         if hasattr(self.model, 'get_params'):
-            info['model_params'] = self.model.get_params()
+            try:
+                info['model_params'] = self.model.get_params()
+            except Exception:
+                # Some models may have issues with get_params, skip it
+                pass
         
         return info
     
@@ -238,140 +242,32 @@ class UnifiedModelWrapper:
             Loaded UnifiedModelWrapper instance
         """
         return joblib.load(filepath)
-    
-    @classmethod
-    def from_legacy_format(cls, legacy_model_data: Dict[str, Any], model_type: str, task_type: str) -> 'UnifiedModelWrapper':
-        """
-        Create a UnifiedModelWrapper from legacy model format.
-        
-        Args:
-            legacy_model_data: Dictionary with 'model', 'bin_edges', 'features' keys
-            model_type: Type of model ('lightgbm', 'xgboost', etc.)
-            task_type: Type of task ('classification', 'regression')
-            
-        Returns:
-            UnifiedModelWrapper instance
-        """
-        model = legacy_model_data['model']
-        features = legacy_model_data['features']
-        bin_edges = legacy_model_data.get('bin_edges')
-        
-        return cls(
-            model=model,
-            model_type=model_type,
-            task_type=task_type,
-            features=features,
-            bin_edges=bin_edges
-        )
-    
-    @classmethod
-    def from_qe_model(cls, qe_model: QuantileEnsemblePredictor, features: List[str]) -> 'UnifiedModelWrapper':
-        """
-        Create a UnifiedModelWrapper from a QuantileEnsemblePredictor.
-        
-        Args:
-            qe_model: Trained QuantileEnsemblePredictor instance
-            features: List of feature names (before encoding)
-            
-        Returns:
-            UnifiedModelWrapper instance
-        """
-        return cls(
-            model=qe_model,
-            model_type='quantile_ensemble',
-            task_type='regression',
-            features=features
-        )
 
 
-# Utility functions for backward compatibility and easy migration
-
-def convert_legacy_models_to_unified(models_dir: Union[str, Path], output_dir: Union[str, Path]) -> None:
+def load_model(filepath: Union[str, Path]) -> UnifiedModelWrapper:
     """
-    Convert all legacy model files to unified wrapper format.
+    Load a UnifiedModelWrapper from disk.
     
     Args:
-        models_dir: Directory containing legacy model files
-        output_dir: Directory to save unified wrapper models
-    """
-    models_dir = Path(models_dir)
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    model_type_mapping = {
-        'lightgbm_classification.pkl': ('lightgbm', 'classification'),
-        'xgboost_classification.pkl': ('xgboost', 'classification'),
-        'lightgbm_regression.pkl': ('lightgbm', 'regression'),
-        'xgboost_regression.pkl': ('xgboost', 'regression'),
-        'lr_classification.pkl': ('logistic_regression', 'classification'),
-        'qe_regression.pkl': ('quantile_ensemble', 'regression'),
-    }
-    
-    for filename, (model_type, task_type) in model_type_mapping.items():
-        legacy_path = models_dir / filename
-        if legacy_path.exists():
-            try:
-                legacy_data = joblib.load(legacy_path)
-                
-                if model_type == 'quantile_ensemble' and not isinstance(legacy_data, dict):
-                    # Handle QE models saved as objects
-                    features = getattr(legacy_data, 'features', [])
-                    unified_model = UnifiedModelWrapper.from_qe_model(legacy_data, features)
-                else:
-                    # Handle dictionary format models
-                    unified_model = UnifiedModelWrapper.from_legacy_format(legacy_data, model_type, task_type)
-                
-                output_path = output_dir / f"unified_{filename}"
-                unified_model.save(output_path)
-                print(f"Converted {filename} -> unified_{filename}")
-                
-            except Exception as e:
-                print(f"Failed to convert {filename}: {e}")
-
-
-def load_any_model(filepath: Union[str, Path]) -> UnifiedModelWrapper:
-    """
-    Load any model format and return a UnifiedModelWrapper.
-    
-    This function handles both legacy formats and unified wrapper formats.
-    
-    Args:
-        filepath: Path to the model file
+        filepath: Path to the unified model file
         
     Returns:
         UnifiedModelWrapper instance
+        
+    Raises:
+        ValueError: If the file doesn't contain a UnifiedModelWrapper
     """
     filepath = Path(filepath)
     
     try:
-        # Try loading as unified wrapper first
         model = joblib.load(filepath)
         if isinstance(model, UnifiedModelWrapper):
             return model
-        
-        # Handle legacy formats
-        if isinstance(model, dict) and 'model' in model:
-            # Legacy dictionary format
-            filename = filepath.name
-            if 'lightgbm' in filename:
-                model_type = 'lightgbm'
-            elif 'xgboost' in filename:
-                model_type = 'xgboost'
-            elif 'lr' in filename:
-                model_type = 'logistic_regression'
-            else:
-                model_type = 'unknown'
-            
-            task_type = 'classification' if 'classification' in filename else 'regression'
-            return UnifiedModelWrapper.from_legacy_format(model, model_type, task_type)
-        
-        elif isinstance(model, QuantileEnsemblePredictor):
-            # Legacy QE model
-            features = getattr(model, 'features', [])
-            return UnifiedModelWrapper.from_qe_model(model, features)
-        
         else:
-            raise ValueError(f"Unknown model format: {type(model)}")
+            raise ValueError(f"File contains {type(model)}, expected UnifiedModelWrapper")
             
     except Exception as e:
-        raise ValueError(f"Failed to load model from {filepath}: {e}")
+        raise ValueError(f"Failed to load unified model from {filepath}: {e}")
+    
+
+

@@ -18,7 +18,7 @@ if APP_DIR not in sys.path:
 
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
 from data_loader import load_unified_simulation_data, get_target_columns
-from resource_prediction.models import load_any_model
+from resource_prediction.models import load_model
 
 
 def run_unified_model(model_path, model_name, confidence_threshold=0.6):
@@ -32,7 +32,7 @@ def run_unified_model(model_path, model_name, confidence_threshold=0.6):
 
     # Load the unified model
     try:
-        unified_model = load_any_model(model_path)
+        unified_model = load_model(model_path)
         model_info = unified_model.get_model_info()
         
         # For classification models, extract bin edges for UI
@@ -160,7 +160,7 @@ def main():
     
     try:
         # Load model info for display
-        unified_model = load_any_model(model_path)
+        unified_model = load_model(model_path)
         model_info = unified_model.get_model_info()
         
         st.sidebar.markdown(f"**Model Type:** {model_info['model_type']}")

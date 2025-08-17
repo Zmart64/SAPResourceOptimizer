@@ -283,18 +283,13 @@ class Trainer:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
             
             # Create unified wrapper for the model
-            if base_model_name == 'quantile_ensemble':
-                # For QE models, create wrapper from the model object
-                unified_model = UnifiedModelWrapper.from_qe_model(model, features)
-            else:
-                # For classification models, create wrapper from dictionary format
-                unified_model = UnifiedModelWrapper(
-                    model=model,
-                    model_type=base_model_name,
-                    task_type=task_type,
-                    features=features,
-                    bin_edges=bin_edges
-                )
+            unified_model = UnifiedModelWrapper(
+                model=model,
+                model_type=base_model_name,
+                task_type=task_type,
+                features=features,
+                bin_edges=bin_edges
+            )
             
             # Save unified wrapper
             unified_model.save(config.MODELS_DIR / f"{family_name}.pkl")

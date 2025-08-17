@@ -4,26 +4,21 @@ The Unified Model Wrapper provides a consistent interface for all model types in
 
 ## Overview
 
-Previously, different model types required different preprocessing and prediction approaches:
-- Classification models required manual one-hot encoding, feature alignment, and confidence threshold handling
-- Quantile Ensemble models handled preprocessing internally but had different interfaces
-- Each model type needed specific loading and prediction logic
-
-The `UnifiedModelWrapper` solves these issues by:
-- **Encapsulating all preprocessing logic** within the model wrapper
-- **Providing a single `predict(raw_dataframe)` interface** for all model types  
-- **Handling feature engineering automatically** (one-hot encoding, missing features, etc.)
-- **Maintaining backward compatibility** with existing model formats
+The `UnifiedModelWrapper` provides:
+- **Encapsulated preprocessing logic** within the model wrapper
+- **Single `predict(raw_dataframe)` interface** for all model types  
+- **Automatic feature engineering** (one-hot encoding, missing features, etc.)
+- **Consistent model saving and loading** across all model types
 
 ## Quick Start
 
-### Loading Any Model
+### Loading Models
 
 ```python
-from resource_prediction.models import load_any_model
+from resource_prediction.models import load_model
 
-# Load any model format (legacy or unified) 
-model = load_any_model("path/to/model.pkl")
+# Load a unified model
+model = load_model("path/to/unified_model.pkl")
 
 # Make predictions on raw data (no preprocessing needed)
 predictions = model.predict(raw_dataframe)
@@ -33,10 +28,10 @@ predictions = model.predict(raw_dataframe)
 
 ```python
 import pandas as pd
-from resource_prediction.models import load_any_model
+from resource_prediction.models import load_model
 
 # Load model
-model = load_any_model("artifacts/trained_models/lightgbm_classification.pkl")
+model = load_model("artifacts/unified_models/unified_lightgbm_classification.pkl")
 
 # Get model information
 model_info = model.get_model_info()
@@ -48,9 +43,7 @@ print(f"Features: {model_info['num_features']}")
 predictions = model.predict(raw_data, confidence_threshold=0.6)
 ```
 
-## Architecture
-
-### UnifiedModelWrapper Class
+## Class Reference
 
 The core wrapper class that provides the unified interface:
 
@@ -63,10 +56,6 @@ class UnifiedModelWrapper:
     
     @classmethod
     def load(cls, filepath: Union[str, Path]) -> 'UnifiedModelWrapper'
-    @classmethod  
-    def from_legacy_format(cls, legacy_model_data: Dict, model_type: str, task_type: str)
-    @classmethod
-    def from_qe_model(cls, qe_model: QuantileEnsemblePredictor, features: List[str])
 ```
 
 ### Model Types Supported
@@ -88,21 +77,7 @@ The wrapper automatically handles:
 4. **Feature alignment** to ensure correct order matching training data
 5. **Data type conversion** (categorical to numeric, fillna with zeros)
 
-## Migration Guide
-
-### Converting Existing Models
-
-Use the conversion script to migrate all existing models:
-
-```bash
-python scripts/convert_models_to_unified.py
-```
-
-This converts:
-- `artifacts/trained_models/*.pkl` → `artifacts/unified_models/unified_*.pkl`
-- `artifacts/pareto/models/*.pkl` → `artifacts/unified_models/pareto/unified_*.pkl`
-
-### Training Pipeline Integration
+## Training Pipeline Integration
 
 The trainer automatically saves models in unified format:
 
@@ -110,17 +85,14 @@ The trainer automatically saves models in unified format:
 # In trainer.py
 from resource_prediction.models import UnifiedModelWrapper
 
-# For classification models
+# For all model types
 unified_model = UnifiedModelWrapper(
     model=model,
-    model_type=base_model_name,  # 'lightgbm', 'xgboost', etc.
+    model_type=base_model_name,  # 'lightgbm', 'xgboost', 'quantile_ensemble', etc.
     task_type=task_type,         # 'classification', 'regression'
     features=features,
     bin_edges=bin_edges
 )
-
-# For QE models  
-unified_model = UnifiedModelWrapper.from_qe_model(model, features)
 
 # Save unified wrapper
 unified_model.save(config.MODELS_DIR / f"{family_name}.pkl")
@@ -128,94 +100,14 @@ unified_model.save(config.MODELS_DIR / f"{family_name}.pkl")
 
 ### Application Updates
 
-The Streamlit app now uses a single function for all model types:
+The Streamlit app uses a single function for all model types:
 
 ```python
-# Old approach (45+ lines of preprocessing per model type)
-def run_classification(model_path, model_name):
-    # Manual one-hot encoding...
-    # Feature alignment...
-    # Confidence threshold handling...
-    
-def run_qe(model_path):
-    # Different loading logic...
-    # Different prediction interface...
-
-# New unified approach (works for all model types)
+# Unified approach (works for all model types)
 def run_unified_model(model_path, model_name, confidence_threshold=0.6):
-    unified_model = load_any_model(model_path)
+    unified_model = load_model(model_path)
     predictions = unified_model.predict(raw_data, confidence_threshold)
     # That's it! No model-specific preprocessing needed
-```
-
-## Backward Compatibility
-
-The wrapper maintains full backward compatibility:
-
-### Legacy Model Support
-
-```python
-# Automatically handles legacy dictionary format
-legacy_model = joblib.load("old_lightgbm_model.pkl")  # {'model': ..., 'bin_edges': ..., 'features': ...}
-unified_model = UnifiedModelWrapper.from_legacy_format(legacy_model, 'lightgbm', 'classification')
-
-# Automatically handles legacy QE models  
-legacy_qe = joblib.load("old_qe_model.pkl")  # QuantileEnsemblePredictor object
-unified_model = UnifiedModelWrapper.from_qe_model(legacy_qe, features)
-```
-
-### Legacy Function Interfaces
-
-```python
-# Legacy functions still work but internally use unified interface
-run_classification(model_path, model_name)  # Now calls run_unified_model() 
-run_qe(model_path)                          # Now calls run_unified_model()
-```
-
-## Testing
-
-### Unit Tests
-
-```python
-import pytest
-from resource_prediction.models import UnifiedModelWrapper, load_any_model
-
-def test_unified_wrapper_classification():
-    # Test classification model wrapping
-    model = load_any_model("artifacts/trained_models/lightgbm_classification.pkl")
-    assert model.task_type == 'classification'
-    assert model.model_type == 'lightgbm'
-    
-    # Test prediction interface
-    predictions = model.predict(test_data)
-    assert len(predictions) == len(test_data)
-
-def test_unified_wrapper_regression():
-    # Test QE model wrapping  
-    model = load_any_model("artifacts/pareto/models/qe_balanced.pkl")
-    assert model.task_type == 'regression'
-    assert model.model_type == 'quantile_ensemble'
-    
-    # Test prediction interface
-    predictions = model.predict(test_data)
-    assert len(predictions) == len(test_data)
-```
-
-### Integration Tests
-
-```python
-def test_app_integration():
-    # Test app works with all model types
-    models = [
-        "artifacts/trained_models/lightgbm_classification.pkl",
-        "artifacts/trained_models/xgboost_classification.pkl", 
-        "artifacts/pareto/models/qe_balanced.pkl"
-    ]
-    
-    for model_path in models:
-        model = load_any_model(model_path)
-        predictions = model.predict(test_data)
-        assert predictions is not None
 ```
 
 ## Benefits
@@ -235,7 +127,6 @@ def test_app_integration():
 - **Eliminates preprocessing bugs** by centralizing logic
 - **Reduces feature engineering mistakes** through automation
 - **Consistent behavior** across all model types
-- **Backward compatibility** ensures no breaking changes
 
 ## Adding New Model Types
 
@@ -254,14 +145,13 @@ elif model_type == 'new_model_type':
     X_processed = self._preprocess_new_model_features(X_processed)
 
 # Update training pipeline
-if base_model_name == 'new_model':
-    unified_model = UnifiedModelWrapper(
-        model=model,
-        model_type='new_model_type', 
-        task_type=task_type,
-        features=features,
-        bin_edges=bin_edges
-    )
+unified_model = UnifiedModelWrapper(
+    model=model,
+    model_type='new_model_type', 
+    task_type=task_type,
+    features=features,
+    bin_edges=bin_edges
+)
 ```
 
 ## API Reference
@@ -289,16 +179,10 @@ class UnifiedModelWrapper:
 
 ### Utility Functions
 
-#### load_any_model()
+#### load_model()
 ```python
-def load_any_model(filepath: Union[str, Path]) -> UnifiedModelWrapper:
-    """Load any model format (legacy or unified) and return UnifiedModelWrapper."""
-```
-
-#### convert_legacy_models_to_unified()
-```python  
-def convert_legacy_models_to_unified(models_dir: Union[str, Path], output_dir: Union[str, Path]) -> None:
-    """Convert all legacy model files to unified wrapper format."""
+def load_model(filepath: Union[str, Path]) -> UnifiedModelWrapper:
+    """Load a UnifiedModelWrapper from disk."""
 ```
 
 ## Troubleshooting
@@ -309,7 +193,7 @@ def convert_legacy_models_to_unified(models_dir: Union[str, Path], output_dir: U
 ```python
 import sys
 sys.path.insert(0, '/path/to/project/root')
-from resource_prediction.models import load_any_model
+from resource_prediction.models import load_model
 ```
 
 **Feature Mismatch**: The wrapper automatically handles missing features, but if you get feature warnings:
@@ -319,13 +203,12 @@ print("Expected features:", model_info['features'])
 print("Available features:", list(your_data.columns))
 ```
 
-**Legacy Model Loading**: If legacy models fail to load:
+**Model Loading Issues**: If models fail to load, ensure they are in UnifiedModelWrapper format:
 ```python
 # Check model format
 import joblib
 model_data = joblib.load("model.pkl")
 print("Model format:", type(model_data))
-print("Keys:", list(model_data.keys()) if isinstance(model_data, dict) else "Not dict")
 ```
 
 ### Performance Considerations
@@ -334,11 +217,48 @@ print("Keys:", list(model_data.keys()) if isinstance(model_data, dict) else "Not
 - **Prediction Speed**: No performance impact - preprocessing is optimized
 - **Loading Time**: Slightly faster due to reduced I/O for metadata
 
-### Migration Checklist
+## Testing
 
-- [ ] Run conversion script: `python scripts/convert_models_to_unified.py`
-- [ ] Update model loading code to use `load_any_model()`
-- [ ] Replace model-specific prediction logic with `model.predict()`  
-- [ ] Test all model types with new interface
-- [ ] Update documentation and examples
-- [ ] Verify backward compatibility with existing models
+### Unit Tests
+
+```python
+import pytest
+from resource_prediction.models import UnifiedModelWrapper, load_model
+
+def test_unified_wrapper_classification():
+    # Test classification model wrapping
+    model = load_model("artifacts/unified_models/unified_lightgbm_classification.pkl")
+    assert model.task_type == 'classification'
+    assert model.model_type == 'lightgbm'
+    
+    # Test prediction interface
+    predictions = model.predict(test_data)
+    assert len(predictions) == len(test_data)
+
+def test_unified_wrapper_regression():
+    # Test QE model wrapping  
+    model = load_model("artifacts/pareto/models/qe_balanced.pkl")
+    assert model.task_type == 'regression'
+    assert model.model_type == 'quantile_ensemble'
+    
+    # Test prediction interface
+    predictions = model.predict(test_data)
+    assert len(predictions) == len(test_data)
+```
+
+### Integration Tests
+
+```python
+def test_app_integration():
+    # Test app works with all model types
+    models = [
+        "artifacts/unified_models/unified_lightgbm_classification.pkl",
+        "artifacts/unified_models/unified_xgboost_classification.pkl", 
+        "artifacts/pareto/models/qe_balanced.pkl"
+    ]
+    
+    for model_path in models:
+        model = load_model(model_path)
+        predictions = model.predict(test_data)
+        assert predictions is not None
+```
