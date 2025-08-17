@@ -136,12 +136,22 @@ class QuantileEnsemblePredictor(BasePredictor):
     
     def get_params(self) -> Dict[str, Any]:
         """Get model parameters."""
+        try:
+            gb_params = self.gb.get_params() if hasattr(self.gb, 'get_params') else {}
+        except Exception:
+            gb_params = {}
+            
+        try:
+            xgb_params = self.xgb.get_params() if hasattr(self.xgb, 'get_params') else {}
+        except Exception:
+            xgb_params = {}
+            
         return {
             "alpha": self.alpha,
             "safety": self.safety,
             "random_state": self.random_state,
-            "gb_params": self.gb.get_params(),
-            "xgb_params": self.xgb.get_params()
+            "gb_params": gb_params,
+            "xgb_params": xgb_params
         }
     
     def set_params(self, **params) -> 'QuantileEnsemblePredictor':

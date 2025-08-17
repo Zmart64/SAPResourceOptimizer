@@ -127,10 +127,10 @@ def main():
     # Model selection in sidebar
     st.sidebar.title("Model Selection")
     
-    # Available models configuration
+    # Available models configuration - using unified models
     available_models = {
-        "LightGBM Classification": "artifacts/trained_models/lightgbm_classification.pkl",
-        "XGBoost Classification": "artifacts/trained_models/xgboost_classification.pkl", 
+        "LightGBM Classification": "artifacts/unified_models/unified_lightgbm_classification.pkl",
+        "XGBoost Classification": "artifacts/unified_models/unified_xgboost_classification.pkl", 
         "QE Balanced": "artifacts/pareto/models/qe_balanced.pkl",
         "QE Low Waste": "artifacts/pareto/models/qe_low_waste.pkl",
         "QE Low Underallocation": "artifacts/pareto/models/qe_low_underallocation.pkl"
