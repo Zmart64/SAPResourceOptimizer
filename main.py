@@ -50,8 +50,10 @@ def main(args):
         use_defaults=use_defaults
     )
 
-    if args.run_search or args.train:
+    if args.run_search:
         trainer.run_optimization_and_evaluation()
+    elif args.train:
+        trainer.run_simple_training()
     elif args.evaluate_only:
         trainer.run_evaluation_from_files()
 
