@@ -294,10 +294,6 @@ class Trainer:
             # Save unified wrapper
             unified_model.save(config.MODELS_DIR / f"{family_name}.pkl")
             
-            # Also save legacy format for backward compatibility (temporary)
-            joblib.dump({'model': model, 'bin_edges': bin_edges,
-                        'features': features}, config.MODELS_DIR / f"{family_name}_legacy.pkl")
-            
             print(f"Saved unified model artifact for '{family_name}'")
 
         model_alloc_stats = calculate_allocation_categories(
