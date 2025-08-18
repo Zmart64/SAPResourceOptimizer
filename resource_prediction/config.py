@@ -79,7 +79,7 @@ class Config:
     ]
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
-    CV_SPLITS = 3
+    CV_SPLITS = 1
     N_CALLS_PER_FAMILY = 1
     NUM_PARALLEL_WORKERS = 1
 
