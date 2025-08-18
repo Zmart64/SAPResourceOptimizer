@@ -101,32 +101,101 @@ poetry run python serve_docs.py
 
 ## Imagined "how to use" workflow
 
-### 1. First run
+### 1. Simple Training (Recommended)
 
 ```console
 # Activate Poetry environment
 poetry shell
 
-# Run full pipeline for classification
-python main.py --model-type classification --run-search
+# Train all models with default parameters (simple and fast)
+python main.py --train
+
+# Train only classification models
+python main.py --train --task-type classification
+
+# Train specific model families
+python main.py --train --model-families xgboost_classification lightgbm_regression
 ```
 
-### 2. Subsequent run (skipping preprocessing)
+### 2. Advanced Training with Hyperparameter Search
 
 ```console
-# Now regression, but re-use preprocessed data from first run
+# Run full pipeline with hyperparameter optimization for classification
+python main.py --model-type classification --run-search
+
+# Now regression, but re-use preprocessed data from first run  
 python main.py --model-type regression --skip-preprocessing --run-search
+
+# Quick training with defaults (equivalent to --train)
+python main.py --run-search --use-defaults
+```
+
+### 3. Evaluation Only
+
+```console
+# Skip training and just evaluate existing models
+python main.py --evaluate-only
+```
+
+## Command Line Reference
+
+### Main Training Options
+
+| Command | Description | Use Case |
+|---------|-------------|----------|
+| `--train` | Train models with default parameters | Quick prototyping, baseline results |
+| `--run-search` | Full hyperparameter optimization | Best performance, production models |
+| `--run-search --use-defaults` | Train with defaults (same as `--train`) | Legacy compatibility |
+| `--evaluate-only` | Evaluate existing trained models | Testing, comparison |
+
+### Common Filtering Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--task-type` | Filter by regression or classification | `--task-type regression` |
+| `--model-families` | Train specific model families | `--model-families xgboost_regression lightgbm_classification` |
+| `--skip-preprocessing` | Reuse preprocessed data | `--skip-preprocessing --train` |
+
+### Quick Examples
+
+```console
+# Simple: Train all models with defaults
+python main.py --train
+
+# Focused: Train only XGBoost models  
+python main.py --train --model-families xgboost_regression xgboost_classification
+
+# Fast: Reuse preprocessing from previous run
+python main.py --train --skip-preprocessing
+
+# Advanced: Full hyperparameter search for specific models
+python main.py --run-search --model-families lightgbm_regression
 ```
 
 ## Features
 
 - **Multiple ML Approaches**: Regression and classification models for memory prediction
+- **Flexible Training Options**: Simple `--train` mode or advanced `--run-search` with hyperparameter optimization
 - **Automated Hyperparameter Tuning**: Optuna-based optimization with parallel execution
 - **Business-Focused Metrics**: Cost-aware objective function balancing failures vs waste
 - **Rich Feature Engineering**: Temporal, categorical, and rolling window features
 - **Unified Model Architecture**: Standardized BasePredictor interface for all models
 - **Interactive Web Applications**: Streamlit-based dashboards for model exploration
 - **Production-Ready**: Poetry dependency management, comprehensive testing, and documentation
+
+### Training Modes
+
+**Simple Training (`--train`)**:
+- Train models with default parameters (no hyperparameter search)
+- 90% simpler than `--run-search --use-defaults`
+- Perfect for quick prototyping and baseline results
+- Example: `python main.py --train --model-families xgboost_regression`
+
+**Advanced Training (`--run-search`)**:
+- Full hyperparameter optimization using Optuna
+- Best model performance but slower execution
+- Use `--use-defaults` to skip search and use default parameters
+- Example: `python main.py --run-search --model-families xgboost_regression`
 
 ## Supported Models
 
@@ -169,6 +238,23 @@ To add a new model type:
 3. **Configure model family** in `resource_prediction/config.py`
 4. **Define search space** in `config.py`
 5. **Add trainer integration** in `resource_prediction/training/trainer.py`
+
+**Example: Adding a new regression model**
+
+```python
+# In resource_prediction/config.py HYPERPARAMETER_CONFIGS
+"my_regression_model": {
+    "n_estimators": {"min": 50, "max": 200, "type": "int", "default": 100},
+    "max_depth": {"min": 3, "max": 10, "type": "int", "default": 6},
+    "learning_rate": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+    # No alpha or use_quant_feats required - only include parameters your model actually needs!
+}
+```
+
+**Model-Specific Parameters**: The hyperparameter system now uses model-specific configuration rather than forcing universal parameters. This means:
+- New regression models don't need `alpha` or `use_quant_feats` unless they use quantile prediction
+- Only include parameters that your specific model actually uses
+- No more parameter conflicts when adding new model types
 
 See the documentation for detailed examples.
 
