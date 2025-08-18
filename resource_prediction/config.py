@@ -80,7 +80,7 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 10
+    N_CALLS_PER_FAMILY = 20
     NUM_PARALLEL_WORKERS = 1
 
     MODEL_FAMILIES = {
