@@ -19,11 +19,13 @@ from resource_prediction.models import QuantileEnsemblePredictor
 class OptunaOptimizer:
     """Orchestrates hyperparameter search for all model families using Optuna."""
 
-    def __init__(self, config: Config, X_train: pd.DataFrame, y_train: pd.DataFrame, task_type_filter: str | None = None):
+    def __init__(self, config: Config, X_train: pd.DataFrame, y_train: pd.DataFrame, 
+                 task_type_filter: str | None = None, model_families: list[str] | None = None):
         self.config = config
         self.X_train = X_train
         self.y_train_gb = y_train[config.TARGET_COLUMN_PROCESSED]
         self.task_type_filter = task_type_filter
+        self.model_families = model_families
         self.config.OPTUNA_DB_DIR.mkdir(exist_ok=True, parents=True)
 
     def _get_feature_set(self, use_quant_feats: bool):
@@ -177,6 +179,8 @@ class OptunaOptimizer:
         all_studies = []
         for family_name, metadata in self.config.MODEL_FAMILIES.items():
             if self.task_type_filter and metadata['type'] != self.task_type_filter:
+                continue
+            if self.model_families and family_name not in self.model_families:
                 continue
 
             storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"

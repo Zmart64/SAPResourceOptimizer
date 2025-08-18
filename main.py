@@ -40,7 +40,9 @@ def main(args):
         config,
         evaluate_all_archs=args.evaluate_all_archs,
         task_type_filter=args.task_type,
-        save_models=args.save_models
+        save_models=args.save_models,
+        model_families=args.model_families,
+        use_defaults=args.use_defaults
     )
 
     if args.run_search:
@@ -94,6 +96,18 @@ if __name__ == "__main__":
         "--save-models",
         action="store_true",
         help="If set, saves the final evaluated champion model(s) as .pkl files in the `resource_prediction/models` directory."
+    )
+    parser.add_argument(
+        "--model-families",
+        type=str,
+        nargs="*",
+        help="Specify which model families to run (e.g., 'xgboost_regression rf_classification').\nBy default, all model families are run. Available options: " + 
+             ", ".join(Config.MODEL_FAMILIES.keys())
+    )
+    parser.add_argument(
+        "--use-defaults",
+        action="store_true",
+        help="Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization."
     )
 
     args = parser.parse_args()

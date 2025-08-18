@@ -49,14 +49,25 @@ class Trainer:
     Orchestrates the ML pipeline: search, final evaluation, and reporting.
     """
 
-    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None, save_models: bool = False):
+    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None, 
+                 save_models: bool = False, model_families: list[str] | None = None, use_defaults: bool = False):
         """
         Initializes the Trainer and loads data splits and baseline statistics.
+        
+        Args:
+            config: Configuration object
+            evaluate_all_archs: Whether to evaluate all architectures
+            task_type_filter: Filter by task type ('regression' or 'classification')
+            save_models: Whether to save trained models
+            model_families: List of specific model families to run (e.g., ['xgboost_regression', 'rf_classification'])
+            use_defaults: If True, train models with default hyperparameters instead of running hyperparameter search
         """
         self.config = config
         self.evaluate_all_archs = evaluate_all_archs
         self.task_type_filter = task_type_filter
         self.save_models = save_models
+        self.model_families = model_families
+        self.use_defaults = use_defaults
         self.X_train, self.y_train, self.X_test, self.y_test = self._load_data()
 
         self.baseline_stats = None
@@ -94,7 +105,7 @@ class Trainer:
 
     def run_optimization_and_evaluation(self):
         """
-        Runs hyperparameter search, evaluates all found architectures, and updates
+        Runs hyperparameter search or default training, evaluates all found architectures, and updates
         the persistent champion result files. This is the only function that modifies
         the champion CSV files.
         """
@@ -102,12 +113,16 @@ class Trainer:
             print("Exiting due to missing data.")
             return
 
-        print("\nInitiating hyperparameter search...")
-        optimizer = OptunaOptimizer(
-            self.config, self.X_train, self.y_train, self.task_type_filter)
-        studies = optimizer.run()
+        if self.use_defaults:
+            print("\nTraining models with default hyperparameters...")
+            studies = self._train_with_defaults()
+        else:
+            print("\nInitiating hyperparameter search...")
+            optimizer = OptunaOptimizer(
+                self.config, self.X_train, self.y_train, self.task_type_filter, self.model_families)
+            studies = optimizer.run()
 
-        print("\nSearch complete. Evaluating all architectures to update champion files...")
+        print("\nSearch/Training complete. Evaluating all architectures to update champion files...")
         regr_results_df, class_results_df, _ = self._evaluate_and_report(
             studies, force_evaluate_all=True)
 
@@ -117,6 +132,67 @@ class Trainer:
         if not class_results_df.empty:
             self._update_and_save_champion_results(
                 class_results_df, self.config.CLASSIFICATION_RESULTS_CSV_PATH)
+
+    def _train_with_defaults(self):
+        """
+        Train models using default hyperparameters instead of running hyperparameter search.
+        Returns mock studies that can be used with the existing evaluation pipeline.
+        """
+        studies = []
+        
+        # Get the model families to train
+        families_to_train = self.config.MODEL_FAMILIES.items()
+        if self.model_families:
+            families_to_train = [(name, metadata) for name, metadata in families_to_train 
+                                if name in self.model_families]
+        
+        for family_name, metadata in families_to_train:
+            if self.task_type_filter and metadata['type'] != self.task_type_filter:
+                continue
+                
+            print(f"Training {family_name} with default parameters...")
+            
+            # Get default parameters
+            base_model = metadata['base_model']
+            task_type = metadata['type']
+            default_params = self.config.get_default_params(base_model, task_type)
+            
+            # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
+            from resource_prediction.training.hyperparameter import OptunaOptimizer
+            optimizer = OptunaOptimizer(self.config, self.X_train, self.y_train)
+            
+            # Create a mock trial with default parameters
+            class DefaultTrial:
+                def __init__(self, params):
+                    self.params = params
+                    
+                def suggest_categorical(self, name, choices):
+                    return self.params.get(name, choices[0])
+                    
+                def suggest_int(self, name, low, high):
+                    return self.params.get(name, (low + high) // 2)
+                    
+                def suggest_float(self, name, low, high, log=False):
+                    return self.params.get(name, (low + high) / 2)
+            
+            trial = DefaultTrial(default_params)
+            
+            # Evaluate the model
+            try:
+                score = optimizer._objective(trial, base_model, task_type)
+                
+                # Create a mock study for compatibility with existing evaluation code
+                mock_trial = MockTrial(default_params, score)
+                mock_study = MockStudy(family_name, mock_trial)
+                studies.append(mock_study)
+                
+                print(f"  {family_name}: CV Score = {score:.4f}")
+                
+            except Exception as e:
+                print(f"  Error training {family_name}: {e}")
+                continue
+        
+        return studies
 
     def run_evaluation_from_files(self):
         """
