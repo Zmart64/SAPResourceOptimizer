@@ -6,7 +6,6 @@ import joblib
 from typing import Dict, Any, Union, Optional, List
 from pathlib import Path
 
-from .quantile_ensemble import QuantileEnsemblePredictor
 from .base import BasePredictor
 from ..preprocessing import ModelPreprocessor
 

@@ -6,10 +6,10 @@ interface for consistency across training and application layers.
 """
 
 from .base import BasePredictor
-from .quantile_ensemble import QuantileEnsemblePredictor
-from .xgboost_models import XGBoostRegressor, XGBoostClassifier
-from .lightgbm_models import LightGBMRegressor, LightGBMClassifier
-from .sklearn_models import RandomForestClassifier, LogisticRegression
+from .implementations.quantile_ensemble import QuantileEnsemblePredictor
+from .implementations.xgboost_models import XGBoostRegressor, XGBoostClassifier
+from .implementations.lightgbm_models import LightGBMRegressor, LightGBMClassifier
+from .implementations.sklearn_models import RandomForestClassifier, LogisticRegression
 from .unified_wrapper import DeployableModel, load_model
 
 __all__ = [

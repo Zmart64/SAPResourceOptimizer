@@ -73,7 +73,7 @@ make dev
 - 🧠 **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
 - 🏗️ **Production Ready** - Complete serialization with metadata and preprocessing pipeline
 - 📦 **Extensible Design** - Easy to add new models following the same pattern
-- � **Type Safety** - Clear separation between model logic and deployment wrapper
+- ✨ **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
 
 ### Documentation
 
@@ -197,6 +197,33 @@ python main.py --run-search --model-families lightgbm_regression
 - Use `--use-defaults` to skip search and use default parameters
 - Example: `python main.py --run-search --model-families xgboost_regression`
 
+## Recent Improvements ✨
+
+**Unified Model Architecture (2025-08)**: The codebase has been refactored to use consistent wrapper models throughout:
+
+- ✅ **Eliminated Parameter Filtering** - No more complex parameter dictionaries and filtering logic
+- ✅ **Consistent Model Usage** - Hyperparameter search and evaluation use identical model classes
+- ✅ **Simplified Extension** - Adding new models requires no parameter mapping code
+- ✅ **Cleaner Configuration** - Parameter names are consistent (e.g., `learning_rate` vs `lr`)
+
+**Before** (complex parameter filtering):
+```python
+# Old approach required manual parameter filtering
+xgb_params = {k: v for k, v in best_params.items() 
+              if k in ['alpha', 'n_estimators', 'max_depth', 'learning_rate'] and pd.notna(v)}
+if 'lr' in best_params and 'learning_rate' not in xgb_params:
+    xgb_params['learning_rate'] = best_params['lr']
+model = XGBoostClassifier(**xgb_params, random_state=config.RANDOM_STATE)
+```
+
+**After** (clean direct usage):
+```python
+# New approach: models accept parameters directly
+model = XGBoostClassifier(**best_params, random_state=config.RANDOM_STATE)
+```
+
+This architectural improvement makes the codebase much more maintainable and easier to extend.
+
 ## Supported Models
 
 **Regression Models** (predict exact memory values):
@@ -221,42 +248,127 @@ costly than over-allocation (wasting resources).
 
 ### Model Architecture
 
-The project uses a clean model architecture:
+The project uses a clean, consistent model architecture:
 
 - **BasePredictor Interface**: All models implement consistent `fit()` and `predict()` methods
 - **DeployableModel Wrapper**: Production-ready wrapper with integrated preprocessing
 - **ModelPreprocessor**: Handles feature engineering automatically
+- **Unified Parameter Handling**: Both hyperparameter search and evaluation use the same wrapper models
+
+### Directory Structure
+
+The models are organized for clarity and maintainability:
+
+```
+resource_prediction/models/
+├── __init__.py              # Public API exports
+├── base.py                  # BasePredictor interface
+├── unified_wrapper.py       # DeployableModel for production
+└── implementations/         # Specific model implementations
+    ├── lightgbm_models.py
+    ├── quantile_ensemble.py
+    ├── sklearn_models.py
+    └── xgboost_models.py
+```
+
+**Design Principles:**
+- **Separation of Concerns**: Infrastructure files (`base.py`, `unified_wrapper.py`) are separated from specific implementations
+- **Clear Organization**: All concrete model implementations are grouped in the `implementations/` directory
+- **Simple Imports**: Users import from `resource_prediction.models` regardless of internal structure
+- **Easy Extension**: New models go in `implementations/` with import added to main `__init__.py`
 
 ## How to Extend
 
 ### Adding New Models
 
-To add a new model type:
+The architecture makes it simple to add new models. Both hyperparameter search and final evaluation use the same wrapper classes, eliminating parameter filtering complexity.
 
-1. **Implement BasePredictor interface** in `resource_prediction/models/`
-2. **Add to model registry** in `resource_prediction/models/__init__.py`  
-3. **Configure model family** in `resource_prediction/config.py`
-4. **Define search space** in `config.py`
-5. **Add trainer integration** in `resource_prediction/training/trainer.py`
+**Step-by-Step Guide:**
 
-**Example: Adding a new regression model**
+1. **Create Model Wrapper** in `resource_prediction/models/implementations/`
+   ```python
+   from ..base import BasePredictor
+   import pandas as pd
+   import numpy as np
+   
+   class MyNewModel(BasePredictor):
+       def __init__(self, param1: int = 100, param2: float = 0.1, random_state: int = 42, **kwargs):
+           self.param1 = param1
+           self.param2 = param2
+           self.random_state = random_state
+           # Your model initialization here
+           
+       def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+           # Implement training logic
+           pass
+           
+       def predict(self, X: pd.DataFrame) -> np.ndarray:
+           # Implement prediction logic
+           pass
+   ```
 
-```python
-# In resource_prediction/config.py HYPERPARAMETER_CONFIGS
-"my_regression_model": {
-    "n_estimators": {"min": 50, "max": 200, "type": "int", "default": 100},
-    "max_depth": {"min": 3, "max": 10, "type": "int", "default": 6},
-    "learning_rate": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
-    # No alpha or use_quant_feats required - only include parameters your model actually needs!
-}
-```
+2. **Register Model** in `resource_prediction/models/__init__.py`
+   ```python
+   from .implementations.my_new_model import MyNewModel
+   
+   __all__ = [
+       "BasePredictor",
+       "MyNewModel",  # Add your model here
+       # ... other models
+   ]
+   ```
 
-**Model-Specific Parameters**: The hyperparameter system now uses model-specific configuration rather than forcing universal parameters. This means:
-- New regression models don't need `alpha` or `use_quant_feats` unless they use quantile prediction
-- Only include parameters that your specific model actually uses
-- No more parameter conflicts when adding new model types
+3. **Configure Model Family** in `resource_prediction/config.py`
+   ```python
+   MODEL_FAMILIES = {
+       "my_new_model_regression": {"type": "regression", "base_model": "my_new_model"},
+       # ... other models
+   }
+   ```
 
-See the documentation for detailed examples.
+4. **Define Hyperparameter Space** in `config.py`
+   ```python
+   HYPERPARAMETER_CONFIGS = {
+       "my_new_model": {
+           "use_quant_feats": {"choices": [True, False], "default": True},  # If needed
+           "param1": {"min": 50, "max": 200, "type": "int", "default": 100},
+           "param2": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+           # Only include parameters your model actually uses!
+       }
+   }
+   ```
+
+5. **Add to Hyperparameter Search** in `resource_prediction/training/hyperparameter.py`
+   ```python
+   from resource_prediction.models import MyNewModel
+   
+   # In the _objective method:
+   elif base_model == 'my_new_model':
+       model = MyNewModel(**params, random_state=self.config.RANDOM_STATE)
+   ```
+
+6. **Add to Trainer** in `resource_prediction/training/trainer.py`
+   ```python
+   from resource_prediction.models import MyNewModel
+   
+   # In the _evaluate_single_champion method:
+   elif family_name == 'my_new_model_regression':
+       model = MyNewModel(**best_params, random_state=config.RANDOM_STATE)
+   ```
+
+**That's it!** No parameter filtering or mapping needed - the wrapper model handles all parameters directly.
+
+**Key Benefits of This Architecture:**
+- ✅ **No Parameter Filtering** - Models accept parameters directly from hyperparameter search
+- ✅ **Consistent Interface** - Same model class used in search and evaluation
+- ✅ **Clean Implementation** - Models handle their own parameter validation
+- ✅ **Easy Extension** - Add new models without touching parameter mapping logic
+
+**Model-Specific Parameters**: Only include parameters that your specific model actually uses:
+- Classification models automatically get `n_bins`, `strategy` from the `classification_common` config
+- Regression models only need parameters relevant to their algorithm
+- No need to handle `alpha` unless your model does quantile prediction
+- Use `**kwargs` in your `__init__` to gracefully handle unexpected parameters
 
 ### Customizing Business Logic
 

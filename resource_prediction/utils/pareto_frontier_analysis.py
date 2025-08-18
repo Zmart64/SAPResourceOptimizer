@@ -21,7 +21,7 @@ from itertools import product
 sys.path.append(str(Path(__file__).parent))
 
 from resource_prediction.config import Config
-from resource_prediction.models.quantile_ensemble import QuantileEnsemblePredictor
+from resource_prediction.models.implementations.quantile_ensemble import QuantileEnsemblePredictor
 
 
 class ParetoFrontierAnalyzer:

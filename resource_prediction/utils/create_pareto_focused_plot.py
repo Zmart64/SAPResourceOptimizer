@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from resource_prediction.config import Config
-from resource_prediction.models.quantile_ensemble import QuantileEnsemblePredictor
+from resource_prediction.models.implementations.quantile_ensemble import QuantileEnsemblePredictor
 from resource_prediction.models import DeployableModel
 from resource_prediction.preprocessing import ModelPreprocessor
 

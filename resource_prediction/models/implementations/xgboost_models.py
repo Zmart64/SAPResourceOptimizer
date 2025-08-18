@@ -6,7 +6,7 @@ import xgboost as xgb
 from sklearn.cluster import KMeans
 from typing import Dict, Any, Optional
 
-from .base import BasePredictor
+from ..base import BasePredictor
 
 
 class XGBoostRegressor(BasePredictor):

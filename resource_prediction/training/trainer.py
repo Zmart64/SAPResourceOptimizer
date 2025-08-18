@@ -287,35 +287,17 @@ class Trainer:
             # QuantileEnsemble now accepts parameters directly - much cleaner!
             model = QuantileEnsemblePredictor(**best_params, random_state=config.RANDOM_STATE)
         elif family_name == 'xgboost_regression':
-            xgb_params = {k: v for k, v in best_params.items() 
-                         if k in ['alpha', 'n_estimators', 'max_depth', 'learning_rate'] and pd.notna(v)}
-            model = XGBoostRegressor(**xgb_params, random_state=config.RANDOM_STATE)
+            model = XGBoostRegressor(**best_params, random_state=config.RANDOM_STATE)
         elif family_name == 'xgboost_classification':
-            xgb_params = {k: v for k, v in best_params.items() 
-                         if k in ['n_bins', 'strategy', 'n_estimators', 'max_depth', 'learning_rate'] and pd.notna(v)}
-            # Handle the 'lr' to 'learning_rate' mapping for classification
-            if 'lr' in best_params and 'learning_rate' not in xgb_params:
-                xgb_params['learning_rate'] = best_params['lr']
-            model = XGBoostClassifier(**xgb_params, random_state=config.RANDOM_STATE)
+            model = XGBoostClassifier(**best_params, random_state=config.RANDOM_STATE)
         elif family_name == 'lightgbm_regression':
-            lgb_params = {k: v for k, v in best_params.items() 
-                         if k in ['alpha', 'n_estimators', 'num_leaves', 'learning_rate'] and pd.notna(v)}
-            model = LightGBMRegressor(**lgb_params, random_state=config.RANDOM_STATE)
+            model = LightGBMRegressor(**best_params, random_state=config.RANDOM_STATE)
         elif family_name == 'lightgbm_classification':
-            lgb_params = {k: v for k, v in best_params.items() 
-                         if k in ['n_bins', 'strategy', 'n_estimators', 'max_depth', 'num_leaves', 'learning_rate'] and pd.notna(v)}
-            # Handle the 'lr' to 'learning_rate' mapping for classification
-            if 'lr' in best_params and 'learning_rate' not in lgb_params:
-                lgb_params['learning_rate'] = best_params['lr']
-            model = LightGBMClassifier(**lgb_params, random_state=config.RANDOM_STATE)
+            model = LightGBMClassifier(**best_params, random_state=config.RANDOM_STATE)
         elif family_name == 'rf_classification':
-            rf_params = {k: v for k, v in best_params.items() 
-                        if k in ['n_bins', 'strategy', 'n_estimators', 'max_depth'] and pd.notna(v)}
-            model = RandomForestClassifier(**rf_params, random_state=config.RANDOM_STATE)
+            model = RandomForestClassifier(**best_params, random_state=config.RANDOM_STATE)
         elif family_name == 'lr_classification':
-            lr_params = {k: v for k, v in best_params.items() 
-                        if k in ['n_bins', 'strategy', 'C', 'solver', 'penalty', 'l1_ratio'] and pd.notna(v)}
-            model = LogisticRegression(**lr_params, random_state=config.RANDOM_STATE)
+            model = LogisticRegression(**best_params, random_state=config.RANDOM_STATE)
         else:
             raise ValueError(f"Unknown model family: {family_name}")
 
@@ -379,8 +361,16 @@ class Trainer:
         Performs the core evaluation logic and returns the results as DataFrames.
         It does NOT save the champion result CSVs itself.
         """
-        valid_studies = [s for s in studies if hasattr(
-            s, 'best_trial') and s.best_trial]
+        def _has_valid_best_trial(study):
+            """Safely check if a study has a valid best trial."""
+            try:
+                return hasattr(study, 'best_trial') and study.best_trial is not None
+            except (ValueError, AttributeError):
+                # ValueError: raised when no trials are complete
+                # AttributeError: raised when best_trial doesn't exist
+                return False
+        
+        valid_studies = [s for s in studies if _has_valid_best_trial(s)]
         if not valid_studies:
             print("\nNo successful models found to evaluate.")
             return pd.DataFrame(), pd.DataFrame(), []

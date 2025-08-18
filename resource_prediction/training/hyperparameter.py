@@ -2,18 +2,15 @@
 
 import pandas as pd
 import numpy as np
-import multiprocessing
 import optuna
 
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.cluster import KMeans
-import xgboost as xgb
-import lightgbm as lgb
 
 from resource_prediction.config import Config
-from resource_prediction.models import QuantileEnsemblePredictor
+from resource_prediction.models import (
+    QuantileEnsemblePredictor, XGBoostRegressor, XGBoostClassifier,
+    LightGBMRegressor, LightGBMClassifier, RandomForestClassifier, LogisticRegression
+)
 
 
 class OptunaOptimizer:
@@ -52,69 +49,32 @@ class OptunaOptimizer:
         tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
 
-        if isinstance(model, QuantileEnsemblePredictor):
-            for tr_idx, te_idx in tscv.split(X):
-                model.fit(X.iloc[tr_idx], y.iloc[tr_idx])
-                allocs.extend(model.predict(X.iloc[te_idx]))
-                truths.extend(y.iloc[te_idx])
-        else:
-            X_encoded = pd.get_dummies(
-                X, drop_first=True, dummy_na=False).astype(float)
-            for tr_idx, te_idx in tscv.split(X_encoded):
-                X_train_fold, X_test_fold = X_encoded.iloc[tr_idx], X_encoded.iloc[te_idx]
-                y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
+        for tr_idx, te_idx in tscv.split(X):
+            X_train_fold, X_test_fold = X.iloc[tr_idx], X.iloc[te_idx]
+            y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
 
-                X_test_fold = X_test_fold.reindex(
-                    columns=X_train_fold.columns, fill_value=0)
-
-                model.fit(X_train_fold, y_train_fold)
-                allocs.extend(model.predict(X_test_fold))
-                truths.extend(y_test_fold)
+            # All wrapper models now use the same interface
+            model.fit(X_train_fold, y_train_fold)
+            allocs.extend(model.predict(X_test_fold))
+            truths.extend(y_test_fold)
 
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics)
 
-    def _evaluate_classification(self, model, X, y, n_bins, strategy):
+    def _evaluate_classification(self, model, X, y):
         """Evaluates a classification model using time-series cross-validation."""
-        min_val, max_val = y.min(), y.max()
-        if strategy == 'quantile':
-            try:
-                _, bin_edges = pd.qcut(
-                    y, q=n_bins, retbins=True, duplicates='drop')
-            except ValueError:
-                bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-        elif strategy == 'uniform':
-            bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-        else:  # kmeans
-            kmeans = KMeans(n_clusters=n_bins, random_state=self.config.RANDOM_STATE, n_init='auto').fit(
-                y.values.reshape(-1, 1))
-            centers = sorted(kmeans.cluster_centers_.flatten())
-            edges = [(centers[i] + centers[i+1]) /
-                     2 for i in range(len(centers)-1)]
-            bin_edges = np.array([min_val] + edges + [max_val])
-
-        bin_edges = np.array(sorted(list(set(bin_edges))))
-        if len(bin_edges) < 2:
-            return 1e9
-
-        y_binned = pd.cut(y, bins=bin_edges, labels=False,
-                          include_lowest=True, right=True)
-        X_encoded = pd.get_dummies(
-            X, drop_first=True, dummy_na=False).astype(float)
-
         tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
-        for tr_idx, te_idx in tscv.split(X_encoded):
-            X_train_fold, X_test_fold = X_encoded.iloc[tr_idx], X_encoded.iloc[te_idx]
-            y_train_fold, y_test_fold = y_binned.iloc[tr_idx], y.iloc[te_idx]
+        
+        for tr_idx, te_idx in tscv.split(X):
+            X_train_fold, X_test_fold = X.iloc[tr_idx], X.iloc[te_idx]
+            y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
 
-            X_test_fold = X_test_fold.reindex(
-                columns=X_train_fold.columns, fill_value=0)
-
+            # Fit and predict using the wrapper model's interface
             model.fit(X_train_fold, y_train_fold)
-            pred_class = model.predict(X_test_fold).astype(int)
-            allocs.extend(bin_edges[np.minimum(
-                pred_class + 1, len(bin_edges) - 1)])
+            pred_allocs = model.predict(X_test_fold)
+            
+            allocs.extend(pred_allocs)
             truths.extend(y_test_fold)
 
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
@@ -129,45 +89,30 @@ class OptunaOptimizer:
 
         if model_type == "regression":
             if base_model == 'quantile_ensemble':
-                alpha = params.pop("alpha")
-                gb_params = {'n_estimators': params["gb_n_estimators"],
-                             'max_depth': params["gb_max_depth"], 'learning_rate': params["gb_lr"]}
-                xgb_params = {'n_estimators': params["xgb_n_estimators"],
-                              'max_depth': params["xgb_max_depth"], 'learning_rate': params["xgb_lr"]}
-                model = QuantileEnsemblePredictor(
-                    alpha=alpha, safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params, random_state=self.config.RANDOM_STATE)
+                # QuantileEnsemble accepts parameters directly - same as trainer
+                model = QuantileEnsemblePredictor(**params, random_state=self.config.RANDOM_STATE)
             elif base_model == 'xgboost':
-                model = xgb.XGBRegressor(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+                model = XGBoostRegressor(**params, random_state=self.config.RANDOM_STATE)
             elif base_model == 'lightgbm':
-                model = lgb.LGBMRegressor(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
+                model = LightGBMRegressor(**params, random_state=self.config.RANDOM_STATE)
 
             if model is None:
                 raise ValueError(f"Unknown regression model: {base_model}")
             return self._evaluate_regression(model, X_trial, self.y_train_gb)
 
         else:  # Classification
-            n_bins, strategy = params.pop("n_bins"), params.pop("strategy")
-            if 'lr' in params:
-                params['learning_rate'] = params.pop('lr')
-
             if base_model == 'xgboost':
-                model = xgb.XGBClassifier(
-                    **params, objective="multi:softmax", n_jobs=1, random_state=self.config.RANDOM_STATE)
+                model = XGBoostClassifier(**params, random_state=self.config.RANDOM_STATE)
             elif base_model == 'lightgbm':
-                model = lgb.LGBMClassifier(
-                    **params, objective="multiclass", n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
+                model = LightGBMClassifier(**params, random_state=self.config.RANDOM_STATE)
             elif base_model == 'random_forest':
-                model = RandomForestClassifier(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
+                model = RandomForestClassifier(**params, random_state=self.config.RANDOM_STATE)
             elif base_model == 'logistic_regression':
-                model = LogisticRegression(
-                    **params, max_iter=1000, n_jobs=1, random_state=self.config.RANDOM_STATE, multi_class="auto")
+                model = LogisticRegression(**params, random_state=self.config.RANDOM_STATE)
 
             if model is None:
                 raise ValueError(f"Unknown classification model: {base_model}")
-            return self._evaluate_classification(model, X_trial, self.y_train_gb, n_bins, strategy)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
 
     def run(self):
         """

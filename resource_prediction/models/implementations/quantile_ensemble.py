@@ -6,7 +6,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 import xgboost as xgb
 from typing import Dict, Any, Optional
 
-from .base import BasePredictor
+from ..base import BasePredictor
 
 
 class QuantileEnsemblePredictor(BasePredictor):

@@ -102,7 +102,7 @@ class Config:
                 "use_quant_feats": {"choices": [True, False], "default": True},
                 "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
                 "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-                "lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+                "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
             }
         },
         
@@ -121,7 +121,7 @@ class Config:
                 "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
                 "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
                 "num_leaves": {"min": 20, "max": 64, "type": "int", "default": 31},
-                "lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+                "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
             }
         },
         
