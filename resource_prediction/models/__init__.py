@@ -6,21 +6,23 @@ interface for consistency across training and application layers.
 """
 
 from .base import BasePredictor
+from .implementations.lightgbm_models import LightGBMClassifier, LightGBMRegressor
 from .implementations.quantile_ensemble import QuantileEnsemblePredictor
-from .implementations.xgboost_models import XGBoostRegressor, XGBoostClassifier
-from .implementations.lightgbm_models import LightGBMRegressor, LightGBMClassifier
-from .implementations.sklearn_models import RandomForestClassifier, LogisticRegression
+from .implementations.sizey.sizey import SizeyPredictor
+from .implementations.sklearn_models import LogisticRegression, RandomForestClassifier
+from .implementations.xgboost_models import XGBoostClassifier, XGBoostRegressor
 from .unified_wrapper import DeployableModel, load_model
 
 __all__ = [
     "BasePredictor",
     "QuantileEnsemblePredictor",
-    "XGBoostRegressor", 
+    "XGBoostRegressor",
     "XGBoostClassifier",
     "LightGBMRegressor",
-    "LightGBMClassifier", 
+    "LightGBMClassifier",
     "RandomForestClassifier",
     "LogisticRegression",
+    "SizeyPredictor",
     "DeployableModel",
-    "load_model"
+    "load_model",
 ]
