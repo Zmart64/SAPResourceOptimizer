@@ -10,15 +10,12 @@ from tqdm import tqdm
 from pathlib import Path
 import joblib
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.cluster import KMeans
-import xgboost as xgb
-import lightgbm as lgb
-
 from resource_prediction.config import Config
-from resource_prediction.training.hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
-from resource_prediction.models import DeployableModel
+from resource_prediction.training.hyperparameter import OptunaOptimizer
+from resource_prediction.models import (
+    DeployableModel, QuantileEnsemblePredictor, XGBoostRegressor, XGBoostClassifier,
+    LightGBMRegressor, LightGBMClassifier, RandomForestClassifier, LogisticRegression
+)
 from resource_prediction.preprocessing import ModelPreprocessor
 from resource_prediction.reporting import plot_allocation_comparison, generate_summary_report, calculate_allocation_categories
 
@@ -279,92 +276,74 @@ class Trainer:
         task_type, base_model_name = metadata['type'], metadata['base_model']
         best_params = study.best_trial.params.copy()
 
-        use_quant = best_params.pop("use_quant_feats")
-        base_features = config.BASE_FEATURES + \
-            (config.QUANT_FEATURES if use_quant else [])
+        # Get feature selection
+        use_quant = best_params.pop("use_quant_feats", True)
+        base_features = config.BASE_FEATURES + (config.QUANT_FEATURES if use_quant else [])
         X_train_fs, X_test_fs = X_train[base_features], X_test[base_features]
         y_train_gb, y_test_gb = y_train[config.TARGET_COLUMN_PROCESSED], y_test[config.TARGET_COLUMN_PROCESSED]
 
-        if base_model_name != 'quantile_ensemble':
-            X_train_fs = pd.get_dummies(
-                X_train_fs, drop_first=True, dummy_na=False).astype(float)
-            X_test_fs = pd.get_dummies(
-                X_test_fs, drop_first=True, dummy_na=False).astype(float)
-            X_test_fs = X_test_fs.reindex(
-                columns=X_train_fs.columns, fill_value=0)
-            features = X_train_fs.columns.tolist()
+        # Create the appropriate model using our clean wrappers
+        if family_name == 'qe_regression':
+            # QuantileEnsemble now accepts parameters directly - much cleaner!
+            model = QuantileEnsemblePredictor(**best_params, random_state=config.RANDOM_STATE)
+        elif family_name == 'xgboost_regression':
+            xgb_params = {k: v for k, v in best_params.items() 
+                         if k in ['alpha', 'n_estimators', 'max_depth', 'learning_rate'] and pd.notna(v)}
+            model = XGBoostRegressor(**xgb_params, random_state=config.RANDOM_STATE)
+        elif family_name == 'xgboost_classification':
+            xgb_params = {k: v for k, v in best_params.items() 
+                         if k in ['n_bins', 'strategy', 'n_estimators', 'max_depth', 'learning_rate'] and pd.notna(v)}
+            # Handle the 'lr' to 'learning_rate' mapping for classification
+            if 'lr' in best_params and 'learning_rate' not in xgb_params:
+                xgb_params['learning_rate'] = best_params['lr']
+            model = XGBoostClassifier(**xgb_params, random_state=config.RANDOM_STATE)
+        elif family_name == 'lightgbm_regression':
+            lgb_params = {k: v for k, v in best_params.items() 
+                         if k in ['alpha', 'n_estimators', 'num_leaves', 'learning_rate'] and pd.notna(v)}
+            model = LightGBMRegressor(**lgb_params, random_state=config.RANDOM_STATE)
+        elif family_name == 'lightgbm_classification':
+            lgb_params = {k: v for k, v in best_params.items() 
+                         if k in ['n_bins', 'strategy', 'n_estimators', 'max_depth', 'num_leaves', 'learning_rate'] and pd.notna(v)}
+            # Handle the 'lr' to 'learning_rate' mapping for classification
+            if 'lr' in best_params and 'learning_rate' not in lgb_params:
+                lgb_params['learning_rate'] = best_params['lr']
+            model = LightGBMClassifier(**lgb_params, random_state=config.RANDOM_STATE)
+        elif family_name == 'rf_classification':
+            rf_params = {k: v for k, v in best_params.items() 
+                        if k in ['n_bins', 'strategy', 'n_estimators', 'max_depth'] and pd.notna(v)}
+            model = RandomForestClassifier(**rf_params, random_state=config.RANDOM_STATE)
+        elif family_name == 'lr_classification':
+            lr_params = {k: v for k, v in best_params.items() 
+                        if k in ['n_bins', 'strategy', 'C', 'solver', 'penalty', 'l1_ratio'] and pd.notna(v)}
+            model = LogisticRegression(**lr_params, random_state=config.RANDOM_STATE)
         else:
-            features = base_features
+            raise ValueError(f"Unknown model family: {family_name}")
 
-        model, bin_edges, alloc = None, None, None
+        # Fit and predict using the clean BasePredictor interface
+        model.fit(X_train_fs, y_train_gb)
+        alloc = model.predict(X_test_fs)
 
-        if task_type == 'regression':
-            if base_model_name == 'quantile_ensemble':
-                alpha = best_params.pop("alpha")
-                gb_params = {'n_estimators': best_params["gb_n_estimators"],
-                             'max_depth': best_params["gb_max_depth"], 'learning_rate': best_params["gb_lr"], 'verbose': 0}
-                xgb_params = {'n_estimators': best_params["xgb_n_estimators"],
-                              'max_depth': best_params["xgb_max_depth"], 'learning_rate': best_params["xgb_lr"]}
-                model = QuantileEnsemblePredictor(
-                    alpha=alpha, safety=best_params["safety"], gb_params=gb_params, xgb_params=xgb_params)
-            elif base_model_name == 'xgboost':
-                model = xgb.XGBRegressor(
-                    **best_params, random_state=config.RANDOM_STATE)
-            elif base_model_name == 'lightgbm':
-                model = lgb.LGBMRegressor(
-                    **best_params, random_state=config.RANDOM_STATE, verbose=-1)
-
-            if base_model_name not in ['random_forest']:
-                model.fit(X_train_fs, y_train_gb)
-                alloc = model.predict(X_test_fs)
-        elif task_type == 'classification':
-            n_bins, strategy = best_params.pop(
-                "n_bins"), best_params.pop("strategy")
-            if 'lr' in best_params:
-                best_params['learning_rate'] = best_params.pop('lr')
-            min_val, max_val = y_train_gb.min(), y_train_gb.max()
-            if strategy == 'quantile':
-                try:
-                    _, bin_edges = pd.qcut(
-                        y_train_gb, q=n_bins, retbins=True, duplicates='drop')
-                except ValueError:
-                    bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-            elif strategy == 'uniform':
-                bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-            else:  # kmeans
-                kmeans = KMeans(n_clusters=n_bins, random_state=config.RANDOM_STATE, n_init='auto').fit(
-                    y_train_gb.values.reshape(-1, 1))
-                centers = sorted(kmeans.cluster_centers_.flatten())
-                edges = [(centers[i] + centers[i+1]) /
-                         2 for i in range(len(centers)-1)]
-                bin_edges = np.array([min_val] + edges + [max_val])
-
-            bin_edges = np.array(sorted(list(set(bin_edges))))
-            y_train_binned = pd.cut(
-                y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
-
-            if base_model_name == 'lightgbm':
-                model = lgb.LGBMClassifier(
-                    **best_params, random_state=config.RANDOM_STATE, verbose=-1)
-            else:
-                model_class = {'xgboost': xgb.XGBClassifier, 'random_forest': RandomForestClassifier,
-                               'logistic_regression': LogisticRegression}[base_model_name]
-                model = model_class(
-                    **best_params, random_state=config.RANDOM_STATE)
-
-            model.fit(X_train_fs, y_train_binned)
-            pred_class = model.predict(X_test_fs).astype(int)
-            alloc = bin_edges[np.minimum(pred_class + 1, len(bin_edges) - 1)]
-
+        # Handle saving the model
         if save_model:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
+            
+            # For models that need feature encoding, get the encoded features
+            if hasattr(model, 'columns') and model.columns is not None:
+                features = model.columns
+            else:
+                features = base_features
             
             # Create and fit preprocessing pipeline
             preprocessor = ModelPreprocessor(
                 categorical_features=['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt'],
                 expected_features=features
             )
-            preprocessor.fit(X_train_fs)
+            # Fit preprocessor on encoded data for consistency
+            if hasattr(model, '_encode'):
+                X_train_encoded = model._encode(X_train_fs, fit=False)
+                preprocessor.fit(X_train_encoded)
+            else:
+                preprocessor.fit(X_train_fs)
             
             # Create deployable model wrapper
             deployable_model = DeployableModel(
@@ -372,7 +351,7 @@ class Trainer:
                 model_type=base_model_name,
                 task_type=task_type,
                 preprocessor=preprocessor,
-                bin_edges=bin_edges,
+                bin_edges=getattr(model, 'bin_edges', None),
                 metadata={
                     'training_features': features,
                     'model_family': family_name,
@@ -385,6 +364,7 @@ class Trainer:
             
             print(f"Saved deployable model artifact for '{family_name}'")
 
+        # Calculate metrics
         model_alloc_stats = calculate_allocation_categories(
             name=family_name, allocations=alloc, true_values=y_test_gb.values)
         hold_metrics = Trainer._allocation_metrics(alloc, y_test_gb.values)

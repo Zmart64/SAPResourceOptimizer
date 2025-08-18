@@ -35,10 +35,22 @@ class ParetoFrontierAnalyzer:
         """Load the trained model and test data."""
         print("Loading trained model and test data...")
         
-        # Load trained model
-        model_data = joblib.load(self.config.MODELS_DIR / "qe_regression.pkl")
-        self.base_model = model_data['model']
-        self.features = model_data['features']
+        # Load trained model using the new DeployableModel format
+        from resource_prediction.models import DeployableModel
+        
+        try:
+            # Try loading as DeployableModel first
+            deployable_model = DeployableModel.load(self.config.MODELS_DIR / "qe_regression.pkl")
+            self.base_model = deployable_model.model
+            model_info = deployable_model.get_model_info()
+            self.features = model_info.get('features', [])
+            print("Loaded model in DeployableModel format")
+        except Exception:
+            # Fallback to old format if needed
+            model_data = joblib.load(self.config.MODELS_DIR / "qe_regression.pkl")
+            self.base_model = model_data['model']
+            self.features = model_data['features']
+            print("Loaded model in legacy format")
         
         # Load test data (holdout set)
         self.X_test = pd.read_pickle(self.config.X_TEST_PATH)

@@ -23,7 +23,15 @@ class QuantileEnsemblePredictor(BasePredictor):
         safety: float = 1.05, 
         gb_params: Optional[Dict[str, Any]] = None, 
         xgb_params: Optional[Dict[str, Any]] = None,
-        random_state: int = 42
+        random_state: int = 42,
+        # Individual parameters for convenience (will override gb_params/xgb_params if provided)
+        gb_n_estimators: Optional[int] = None,
+        gb_max_depth: Optional[int] = None,
+        gb_lr: Optional[float] = None,  # Keep current naming
+        xgb_n_estimators: Optional[int] = None,
+        xgb_max_depth: Optional[int] = None,
+        xgb_lr: Optional[float] = None,  # Keep current naming
+        **kwargs  # Accept any additional parameters gracefully
     ):
         """
         Initialize the Quantile Ensemble Predictor.
@@ -34,25 +42,52 @@ class QuantileEnsemblePredictor(BasePredictor):
             gb_params: Parameters for GradientBoostingRegressor
             xgb_params: Parameters for XGBRegressor
             random_state: Random state for reproducibility
+            gb_n_estimators: Number of estimators for GradientBoosting
+            gb_max_depth: Max depth for GradientBoosting
+            gb_learning_rate: Learning rate for GradientBoosting
+            xgb_n_estimators: Number of estimators for XGBoost
+            xgb_max_depth: Max depth for XGBoost
+            xgb_learning_rate: Learning rate for XGBoost
+            **kwargs: Additional parameters (ignored gracefully)
         """
         self.alpha = alpha
         self.safety = safety
         self.random_state = random_state
         
-        # Initialize GradientBoosting regressor
-        gb_defaults = {"loss": "quantile", "alpha": alpha, "random_state": random_state}
-        gb_defaults.update(gb_params or {})
-        self.gb = GradientBoostingRegressor(**gb_defaults)
+        # Build gb_params from individual parameters if provided
+        final_gb_params = {"loss": "quantile", "alpha": alpha, "random_state": random_state}
+        if gb_params:
+            final_gb_params.update(gb_params)
         
-        # Initialize XGBoost regressor
-        xgb_defaults = {
+        # Override with individual parameters if provided
+        if gb_n_estimators is not None:
+            final_gb_params["n_estimators"] = gb_n_estimators
+        if gb_max_depth is not None:
+            final_gb_params["max_depth"] = gb_max_depth
+        if gb_lr is not None:
+            final_gb_params["learning_rate"] = gb_lr
+            
+        self.gb = GradientBoostingRegressor(**final_gb_params)
+        
+        # Build xgb_params from individual parameters if provided
+        final_xgb_params = {
             "objective": "reg:quantileerror", 
             "quantile_alpha": alpha,
             "n_jobs": 1, 
             "random_state": random_state
         }
-        xgb_defaults.update(xgb_params or {})
-        self.xgb = xgb.XGBRegressor(**xgb_defaults)
+        if xgb_params:
+            final_xgb_params.update(xgb_params)
+        
+        # Override with individual parameters if provided
+        if xgb_n_estimators is not None:
+            final_xgb_params["n_estimators"] = xgb_n_estimators
+        if xgb_max_depth is not None:
+            final_xgb_params["max_depth"] = xgb_max_depth
+        if xgb_lr is not None:
+            final_xgb_params["learning_rate"] = xgb_lr
+            
+        self.xgb = xgb.XGBRegressor(**final_xgb_params)
         
         # Store column information for consistent encoding
         self.columns = None

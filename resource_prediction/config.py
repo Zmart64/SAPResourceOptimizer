@@ -63,7 +63,7 @@ class Config:
         "lr_classification":   {"type": "classification", "base_model": "logistic_regression"},
     }
 
-    # Simplified hyperparameter configuration system
+    # Hyperparameter configuration system
     # Each parameter can have either:
     # - "default": single value for default training
     # - "min", "max", "type": range for hyperparameter search

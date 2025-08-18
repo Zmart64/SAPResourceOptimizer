@@ -7,11 +7,20 @@ interface for consistency across training and application layers.
 
 from .base import BasePredictor
 from .quantile_ensemble import QuantileEnsemblePredictor
+from .xgboost_models import XGBoostRegressor, XGBoostClassifier
+from .lightgbm_models import LightGBMRegressor, LightGBMClassifier
+from .sklearn_models import RandomForestClassifier, LogisticRegression
 from .unified_wrapper import DeployableModel, load_model
 
 __all__ = [
     "BasePredictor",
-    "QuantileEnsemblePredictor", 
+    "QuantileEnsemblePredictor",
+    "XGBoostRegressor", 
+    "XGBoostClassifier",
+    "LightGBMRegressor",
+    "LightGBMClassifier", 
+    "RandomForestClassifier",
+    "LogisticRegression",
     "DeployableModel",
     "load_model"
 ]
