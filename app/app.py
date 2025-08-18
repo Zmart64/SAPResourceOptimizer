@@ -17,26 +17,26 @@ if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
 from utils import (setup_sidebar, setup_ui, run_simulation_loop)
-from data_loader import load_unified_simulation_data, get_target_columns
+from data_loader import load_simulation_data, get_target_columns
 from resource_prediction.models import load_model
 
 
-def run_unified_model(model_path, model_name, confidence_threshold=0.6):
-    """Runs the app for any unified model type"""
+def run_model(model_path, model_name, confidence_threshold=0.6):
+    """Runs the app for any model type"""
     
-    # Load the unified simulation data
-    simulation_df = load_unified_simulation_data()
+    # Load the simulation data
+    simulation_df = load_simulation_data()
     if simulation_df is None:
         st.error("Failed to load simulation data. Please ensure data preprocessing has been completed.")
         st.stop()
 
-    # Load the unified model
+    # Load the model
     try:
-        unified_model = load_model(model_path)
-        model_info = unified_model.get_model_info()
+        model = load_model(model_path)
+        model_info = model.get_model_info()
         
         # For classification models, extract bin edges for UI
-        if unified_model.task_type == 'classification':
+        if model.task_type == 'classification':
             BIN_EDGES_GB = model_info.get('bin_edges', [])
         else:
             # For regression models, create reasonable bin edges for UI display
@@ -52,16 +52,16 @@ def run_unified_model(model_path, model_name, confidence_threshold=0.6):
         st.error(f"FATAL: Could not load model. Error: {e}")
         st.stop()
 
-    # Make predictions using the unified interface
+    # Make predictions using the model interface
     try:
-        # The unified model handles all preprocessing internally
-        predictions = unified_model.predict(simulation_df, confidence_threshold=confidence_threshold)
+        # The model handles all preprocessing internally
+        predictions = model.predict(simulation_df, confidence_threshold=confidence_threshold)
         simulation_df['predictions'] = predictions
         
         # For classification models, also store predicted classes for display
-        if unified_model.task_type == 'classification':
+        if model.task_type == 'classification':
             # Reverse engineer class from allocation using bin edges
-            bin_edges = np.array(unified_model.bin_edges)
+            bin_edges = np.array(model.bin_edges)
             predicted_classes = []
             for pred in predictions:
                 # Find which bin edge this prediction corresponds to
@@ -83,11 +83,11 @@ def run_unified_model(model_path, model_name, confidence_threshold=0.6):
     def predict_fn(row, _):
         """Prediction function for the simulation loop"""
         allocation = row["predictions"]
-        predicted_class = row.get("predicted_class", 0) if unified_model.task_type == 'classification' else 0
+        predicted_class = row.get("predicted_class", 0) if model.task_type == 'classification' else 0
         return allocation, predicted_class
 
     # Show classification classes only for classification models
-    show_class = unified_model.task_type == 'classification'
+    show_class = model.task_type == 'classification'
 
     run_simulation_loop(simulation_df, predict_fn,
                         actual_col=target_cols['actual_col'],
@@ -98,17 +98,17 @@ def run_unified_model(model_path, model_name, confidence_threshold=0.6):
                         delay_seconds=delay_seconds,
                         show_class=show_class)
 
-# Legacy function kept for backward compatibility - now uses unified interface
+# Legacy function kept for backward compatibility - now uses the standard interface
 def run_classification(model_path, model_name):
     """Runs the app for classification models (legacy interface)"""
-    return run_unified_model(model_path, model_name, confidence_threshold=0.6)
+    return run_model(model_path, model_name, confidence_threshold=0.6)
 
 
-# Legacy function kept for backward compatibility - now uses unified interface  
+# Legacy function kept for backward compatibility - now uses the standard interface  
 def run_qe(model_path):
     """Runs the app for QE models (legacy interface)"""
     model_name = f"QE Model ({model_path.split('/')[-1].replace('.pkl', '')})"
-    return run_unified_model(model_path, model_name, confidence_threshold=0.6)
+    return run_model(model_path, model_name, confidence_threshold=0.6)
 
 
 def main():
@@ -127,10 +127,10 @@ def main():
     # Model selection in sidebar
     st.sidebar.title("Model Selection")
     
-    # Available models configuration - using unified models
+    # Available models configuration
     available_models = {
-        "LightGBM Classification": "artifacts/trained_models/unified_lightgbm_classification.pkl",
-        "XGBoost Classification": "artifacts/trained_models/unified_xgboost_classification.pkl", 
+        "LightGBM Classification": "artifacts/trained_models/lightgbm_classification.pkl",
+        "XGBoost Classification": "artifacts/trained_models/xgboost_classification.pkl", 
         "QE Balanced": "artifacts/pareto/models/qe_balanced.pkl",
         "QE Low Waste": "artifacts/pareto/models/qe_low_waste.pkl",
         "QE Low Underallocation": "artifacts/pareto/models/qe_low_underallocation.pkl"
@@ -160,8 +160,8 @@ def main():
     
     try:
         # Load model info for display
-        unified_model = load_model(model_path)
-        model_info = unified_model.get_model_info()
+        model = load_model(model_path)
+        model_info = model.get_model_info()
         
         st.sidebar.markdown(f"**Model Type:** {model_info['model_type']}")
         st.sidebar.markdown(f"**Task Type:** {model_info['task_type']}")
@@ -175,7 +175,7 @@ def main():
     
     # Run the selected model
     try:
-        run_unified_model(model_path, selected_model)
+        run_model(model_path, selected_model)
     except Exception as e:
         st.error(f"Error running model: {e}")
         st.stop()

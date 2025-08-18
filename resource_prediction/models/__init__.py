@@ -1,18 +1,18 @@
 """Model implementations for the resource prediction project.
 
-This package contains unified model implementations and interfaces for
+This package contains production-ready model implementations and interfaces for
 the resource prediction project. All models implement the BasePredictor
 interface for consistency across training and application layers.
 """
 
 from .base import BasePredictor
 from .quantile_ensemble import QuantileEnsemblePredictor, QEPredictor
-from .unified_wrapper import UnifiedModelWrapper, load_model
+from .unified_wrapper import DeployableModel, load_model
 
 __all__ = [
     "BasePredictor",
     "QuantileEnsemblePredictor", 
     "QEPredictor",  # Alias for backward compatibility
-    "UnifiedModelWrapper",
+    "DeployableModel",
     "load_model"
 ]

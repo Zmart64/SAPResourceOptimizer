@@ -1,7 +1,7 @@
 """
-Unified data loader for simulation across all model types.
+Data loader for simulation across all model types.
 
-This module provides a unified interface to load holdout simulation data
+This module provides a consistent interface to load holdout simulation data
 that works consistently across classification and regression models.
 """
 
@@ -18,12 +18,12 @@ from resource_prediction.config import Config
 from resource_prediction.data_processing.preprocessor import DataPreprocessor
 
 
-class UnifiedDataLoader:
+class SimulationDataLoader:
     """Loads simulation data consistently for all model types."""
     
     def __init__(self):
         self.config = Config()
-        
+
     def load_simulation_data(self):
         """
         Load holdout simulation data for all model types.
@@ -108,13 +108,18 @@ class UnifiedDataLoader:
         }
 
 
-def load_unified_simulation_data():
+def load_simulation_data():
     """Convenience function to load simulation data."""
-    loader = UnifiedDataLoader()
+    loader = SimulationDataLoader()
     return loader.load_simulation_data()
 
 
 def get_target_columns():
     """Convenience function to get target column names."""
-    loader = UnifiedDataLoader()
+    loader = SimulationDataLoader()
     return loader.get_target_columns()
+
+
+# Backward compatibility aliases
+load_unified_simulation_data = load_simulation_data
+UnifiedDataLoader = SimulationDataLoader

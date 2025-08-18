@@ -1,18 +1,19 @@
-"""Unified Model Wrapper for consistent interface across all model types."""
+"""Deployable Model Wrapper for production-ready model serialization with preprocessing."""
 
 import pandas as pd
 import numpy as np
 import joblib
 from typing import Dict, Any, Union, Optional, List
 from pathlib import Path
-import os
 
 from .quantile_ensemble import QuantileEnsemblePredictor
+from .base import BasePredictor
+from ..preprocessing import ModelPreprocessor
 
 
-class UnifiedModelWrapper:
+class DeployableModel(BasePredictor):
     """
-    A unified wrapper that provides a consistent interface for all model types.
+    A production-ready model wrapper that encapsulates trained models with preprocessing.
     
     This wrapper encapsulates:
     - The trained model
@@ -28,37 +29,86 @@ class UnifiedModelWrapper:
         model: Any, 
         model_type: str, 
         task_type: str,
-        features: List[str],
+        preprocessor: Optional[ModelPreprocessor] = None,
         bin_edges: Optional[np.ndarray] = None,
-        preprocessing_params: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None
     ):
         """
-        Initialize the unified model wrapper.
+        Initialize the deployable model wrapper.
         
         Args:
             model: The trained model object
             model_type: Type of model ('lightgbm', 'xgboost', 'quantile_ensemble', etc.)
             task_type: Type of task ('classification', 'regression')
-            features: List of feature names expected by the model
+            preprocessor: Fitted preprocessing pipeline
             bin_edges: Bin edges for classification models
-            preprocessing_params: Additional preprocessing parameters
+            metadata: Additional model metadata
         """
         self.model = model
         self.model_type = model_type
         self.task_type = task_type
-        self.features = features
+        self.preprocessor = preprocessor
         self.bin_edges = bin_edges
-        self.preprocessing_params = preprocessing_params or {}
+        self.metadata = metadata or {}
         
-        # For quantile ensemble models, extract internal columns if available
-        if isinstance(model, QuantileEnsemblePredictor) and hasattr(model, 'columns'):
-            self.encoded_features = model.columns
-        else:
-            self.encoded_features = None
+        # For backward compatibility with old models without preprocessor
+        if self.preprocessor is None:
+            # Create a legacy preprocessor from the old features format
+            features = self.metadata.get('features', [])
+            self.preprocessor = ModelPreprocessor(expected_features=features)
+            # Mark as legacy to handle differently
+            self.metadata['legacy_model'] = True
     
-    def _preprocess_features(self, X: pd.DataFrame) -> pd.DataFrame:
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> 'DeployableModel':
         """
-        Apply preprocessing specific to the model type.
+        Fit the model and preprocessor to training data.
+        
+        Args:
+            X: Training features
+            y: Training targets
+            **fit_params: Additional fitting parameters
+            
+        Returns:
+            Self for method chaining
+        """
+        # Fit preprocessor if not already fitted
+        if self.preprocessor is not None and not getattr(self.preprocessor, 'is_fitted_', False):
+            self.preprocessor.fit(X)
+        
+        # Preprocess the training data
+        X_processed = self.preprocessor.transform(X) if self.preprocessor else X
+        
+        # Fit the underlying model
+        self.model.fit(X_processed, y, **fit_params)
+        
+        return self
+    
+    def predict(self, X: pd.DataFrame, confidence_threshold: float = 0.6) -> np.ndarray:
+        """
+        Make predictions on raw input data.
+        
+        Args:
+            X: Raw input DataFrame (preprocessing applied automatically)
+            confidence_threshold: Confidence threshold for classification models
+            
+        Returns:
+            Array of predictions (allocations for classification, direct values for regression)
+        """
+        # Apply preprocessing
+        if self.preprocessor is not None:
+            X_processed = self.preprocessor.transform(X)
+        else:
+            # Legacy fallback for old models
+            X_processed = self._legacy_preprocess_features(X)
+        
+        if self.task_type == 'classification':
+            return self._predict_classification(X_processed, confidence_threshold)
+        else:  # regression
+            return self._predict_regression(X_processed)
+    
+    def _legacy_preprocess_features(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Legacy preprocessing for backward compatibility with old models.
         
         Args:
             X: Raw input DataFrame
@@ -73,9 +123,9 @@ class UnifiedModelWrapper:
             return X_processed
         else:
             # For classification models, apply one-hot encoding and feature alignment
-            return self._preprocess_classification_features(X_processed)
+            return self._legacy_preprocess_classification_features(X_processed)
     
-    def _preprocess_classification_features(self, X: pd.DataFrame) -> pd.DataFrame:
+    def _legacy_preprocess_classification_features(self, X: pd.DataFrame) -> pd.DataFrame:
         """
         Apply preprocessing for classification models (LightGBM, XGBoost, etc.).
         
@@ -104,7 +154,8 @@ class UnifiedModelWrapper:
             X_processed['lag_max_rss_global_w5'] = X_processed['lag_max_rss_g1_w1']
         
         # Handle missing one-hot encoded features by creating them with zeros
-        for feature in self.features:
+        legacy_features = self.metadata.get('features', [])
+        for feature in legacy_features:
             if feature not in X_processed.columns:
                 # Check if it's a one-hot encoded categorical feature
                 categorical_prefixes = ['location_', 'component_', 'makeType_', 'bp_arch_', 'bp_compiler_', 'bp_opt_']
@@ -114,12 +165,12 @@ class UnifiedModelWrapper:
                         break
         
         # Select only the features the model expects and ensure correct order
-        available_features = [f for f in self.features if f in X_processed.columns]
+        available_features = [f for f in legacy_features if f in X_processed.columns]
         
-        if len(available_features) < len(self.features) * 0.5:  # Require at least 50% of features
-            raise ValueError(f"Too few matching features: {len(available_features)}/{len(self.features)}")
+        if len(available_features) < len(legacy_features) * 0.5:  # Require at least 50% of features
+            raise ValueError(f"Too few matching features: {len(available_features)}/{len(legacy_features)}")
         
-        X_model = X_processed[self.features].copy()
+        X_model = X_processed[legacy_features].copy()
         
         # Convert categorical columns to numeric if needed for prediction
         for col in X_model.columns:
@@ -128,25 +179,6 @@ class UnifiedModelWrapper:
         
         X_model = X_model.fillna(0)
         return X_model
-    
-    def predict(self, X: pd.DataFrame, confidence_threshold: float = 0.6) -> np.ndarray:
-        """
-        Make predictions on raw input data.
-        
-        Args:
-            X: Raw input DataFrame (no preprocessing required)
-            confidence_threshold: Confidence threshold for classification models
-            
-        Returns:
-            Array of predictions (allocations for classification, direct values for regression)
-        """
-        # Preprocess the input data
-        X_processed = self._preprocess_features(X)
-        
-        if self.task_type == 'classification':
-            return self._predict_classification(X_processed, confidence_threshold)
-        else:  # regression
-            return self._predict_regression(X_processed)
     
     def _predict_classification(self, X_processed: pd.DataFrame, confidence_threshold: float) -> np.ndarray:
         """
@@ -201,15 +233,20 @@ class UnifiedModelWrapper:
         info = {
             'model_type': self.model_type,
             'task_type': self.task_type,
-            'num_features': len(self.features),
-            'features': self.features.copy(),
-            'preprocessing_params': self.preprocessing_params.copy()
+            **self.metadata
         }
         
+        # Add preprocessor info
+        if self.preprocessor is not None and hasattr(self.preprocessor, 'encoded_feature_names_'):
+            info['num_features'] = len(self.preprocessor.encoded_feature_names_)
+            info['features'] = self.preprocessor.encoded_feature_names_.copy()
+        
+        # Add bin edges for classification models
         if self.bin_edges is not None:
             info['bin_edges'] = self.bin_edges.tolist()
             info['num_classes'] = len(self.bin_edges) - 1
         
+        # Add model parameters if available
         if hasattr(self.model, 'get_params'):
             try:
                 info['model_params'] = self.model.get_params()
@@ -221,7 +258,7 @@ class UnifiedModelWrapper:
     
     def save(self, filepath: Union[str, Path]) -> None:
         """
-        Save the unified model wrapper to disk.
+        Save the deployable model wrapper to disk.
         
         Args:
             filepath: Path to save the model
@@ -231,43 +268,43 @@ class UnifiedModelWrapper:
         joblib.dump(self, filepath)
     
     @classmethod
-    def load(cls, filepath: Union[str, Path]) -> 'UnifiedModelWrapper':
+    def load(cls, filepath: Union[str, Path]) -> 'DeployableModel':
         """
-        Load a unified model wrapper from disk.
+        Load a deployable model wrapper from disk.
         
         Args:
             filepath: Path to the saved model
             
         Returns:
-            Loaded UnifiedModelWrapper instance
+            Loaded DeployableModel instance
         """
         return joblib.load(filepath)
 
 
-def load_model(filepath: Union[str, Path]) -> UnifiedModelWrapper:
+def load_model(filepath: Union[str, Path]) -> DeployableModel:
     """
-    Load a UnifiedModelWrapper from disk.
+    Load a DeployableModel from disk.
     
     Args:
-        filepath: Path to the unified model file
+        filepath: Path to the deployable model file
         
     Returns:
-        UnifiedModelWrapper instance
+        DeployableModel instance
         
     Raises:
-        ValueError: If the file doesn't contain a UnifiedModelWrapper
+        ValueError: If the file doesn't contain a DeployableModel
     """
     filepath = Path(filepath)
     
     try:
         model = joblib.load(filepath)
-        if isinstance(model, UnifiedModelWrapper):
+        if isinstance(model, DeployableModel):
             return model
         else:
-            raise ValueError(f"File contains {type(model)}, expected UnifiedModelWrapper")
+            raise ValueError(f"File contains {type(model)}, expected DeployableModel")
             
     except Exception as e:
-        raise ValueError(f"Failed to load unified model from {filepath}: {e}")
+        raise ValueError(f"Failed to load deployable model from {filepath}: {e}")
     
 
 
