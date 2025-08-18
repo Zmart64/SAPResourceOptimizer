@@ -10,14 +10,8 @@ from tqdm import tqdm
 from pathlib import Path
 import joblib
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.cluster import KMeans
-import xgboost as xgb
-import lightgbm as lgb
-
 from resource_prediction.config import Config
-from resource_prediction.training.hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
+from resource_prediction.training.hyperparameter import OptunaOptimizer
 from resource_prediction.models import DeployableModel
 from resource_prediction.preprocessing import ModelPreprocessor
 from resource_prediction.reporting import plot_allocation_comparison, generate_summary_report, calculate_allocation_categories
@@ -49,14 +43,25 @@ class Trainer:
     Orchestrates the ML pipeline: search, final evaluation, and reporting.
     """
 
-    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None, save_models: bool = False):
+    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None, 
+                 save_models: bool = False, model_families: list[str] | None = None, use_defaults: bool = False):
         """
         Initializes the Trainer and loads data splits and baseline statistics.
+        
+        Args:
+            config: Configuration object
+            evaluate_all_archs: Whether to evaluate all architectures
+            task_type_filter: Filter by task type ('regression' or 'classification')
+            save_models: Whether to save trained models
+            model_families: List of specific model families to run (e.g., ['xgboost_regression', 'rf_classification'])
+            use_defaults: If True, train models with default hyperparameters instead of running hyperparameter search
         """
         self.config = config
         self.evaluate_all_archs = evaluate_all_archs
         self.task_type_filter = task_type_filter
         self.save_models = save_models
+        self.model_families = model_families
+        self.use_defaults = use_defaults
         self.X_train, self.y_train, self.X_test, self.y_test = self._load_data()
 
         self.baseline_stats = None
@@ -94,7 +99,7 @@ class Trainer:
 
     def run_optimization_and_evaluation(self):
         """
-        Runs hyperparameter search, evaluates all found architectures, and updates
+        Runs hyperparameter search or default training, evaluates all found architectures, and updates
         the persistent champion result files. This is the only function that modifies
         the champion CSV files.
         """
@@ -102,12 +107,16 @@ class Trainer:
             print("Exiting due to missing data.")
             return
 
-        print("\nInitiating hyperparameter search...")
-        optimizer = OptunaOptimizer(
-            self.config, self.X_train, self.y_train, self.task_type_filter)
-        studies = optimizer.run()
+        if self.use_defaults:
+            print("\nTraining models with default hyperparameters...")
+            studies = self._train_with_defaults()
+        else:
+            print("\nInitiating hyperparameter search...")
+            optimizer = OptunaOptimizer(
+                self.config, self.X_train, self.y_train, self.task_type_filter, self.model_families)
+            studies = optimizer.run()
 
-        print("\nSearch complete. Evaluating all architectures to update champion files...")
+        print("\nSearch/Training complete. Evaluating all architectures to update champion files...")
         regr_results_df, class_results_df, _ = self._evaluate_and_report(
             studies, force_evaluate_all=True)
 
@@ -117,6 +126,67 @@ class Trainer:
         if not class_results_df.empty:
             self._update_and_save_champion_results(
                 class_results_df, self.config.CLASSIFICATION_RESULTS_CSV_PATH)
+
+    def _train_with_defaults(self):
+        """
+        Train models using default hyperparameters instead of running hyperparameter search.
+        Returns mock studies that can be used with the existing evaluation pipeline.
+        """
+        studies = []
+        
+        # Get the model families to train
+        families_to_train = self.config.MODEL_FAMILIES.items()
+        if self.model_families:
+            families_to_train = [(name, metadata) for name, metadata in families_to_train 
+                                if name in self.model_families]
+        
+        for family_name, metadata in families_to_train:
+            if self.task_type_filter and metadata['type'] != self.task_type_filter:
+                continue
+                
+            print(f"Training {family_name} with default parameters...")
+            
+            # Get default parameters
+            base_model = metadata['base_model']
+            task_type = metadata['type']
+            default_params = self.config.get_default_params(base_model, task_type)
+            
+            # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
+            from resource_prediction.training.hyperparameter import OptunaOptimizer
+            optimizer = OptunaOptimizer(self.config, self.X_train, self.y_train)
+            
+            # Create a mock trial with default parameters
+            class DefaultTrial:
+                def __init__(self, params):
+                    self.params = params
+                    
+                def suggest_categorical(self, name, choices):
+                    return self.params.get(name, choices[0])
+                    
+                def suggest_int(self, name, low, high):
+                    return self.params.get(name, (low + high) // 2)
+                    
+                def suggest_float(self, name, low, high, log=False):
+                    return self.params.get(name, (low + high) / 2)
+            
+            trial = DefaultTrial(default_params)
+            
+            # Evaluate the model
+            try:
+                score = optimizer._objective(trial, base_model, task_type)
+                
+                # Create a mock study for compatibility with existing evaluation code
+                mock_trial = MockTrial(default_params, score)
+                mock_study = MockStudy(family_name, mock_trial)
+                studies.append(mock_study)
+                
+                print(f"  {family_name}: CV Score = {score:.4f}")
+                
+            except Exception as e:
+                print(f"  Error training {family_name}: {e}")
+                continue
+        
+        return studies
 
     def run_evaluation_from_files(self):
         """
@@ -146,18 +216,30 @@ class Trainer:
         for _, row in all_results_df.iterrows():
             family_name = row['model']
             cv_score = row['score_cv']
-            param_cols = [c for c in all_results_df.columns if c not in [
-                'model', 'score_cv'] and not c.endswith('_hold')]
-            params = row[param_cols].to_dict()
-            for key, value in params.items():
-                if pd.isna(value):
-                    continue
-                if isinstance(value, float) and value.is_integer():
-                    params[key] = int(value)
-                if str(value).lower() in ['true', 'false']:
-                    params[key] = str(value).lower() == 'true'
-            mock_studies.append(
-                MockStudy(family_name, MockTrial(params, cv_score)))
+            
+            # Use clean configuration system: only get parameters this model family needs
+            try:
+                # Start with default parameters for this family
+                clean_params = self.config.get_defaults(family_name)
+                
+                # Override defaults with values from CSV where available
+                family_config = self.config.HYPERPARAMETER_CONFIGS.get(family_name, {})
+                for param_name in family_config.keys():
+                    if param_name in row and not pd.isna(row[param_name]):
+                        value = row[param_name]
+                        # Type conversion
+                        if isinstance(value, float) and value.is_integer():
+                            value = int(value)
+                        elif str(value).lower() in ['true', 'false']:
+                            value = str(value).lower() == 'true'
+                        clean_params[param_name] = value
+                
+                mock_studies.append(
+                    MockStudy(family_name, MockTrial(clean_params, cv_score)))
+                    
+            except Exception as e:
+                print(f"Warning: Could not load parameters for {family_name}: {e}")
+                continue
 
         self._evaluate_and_report(
             mock_studies, force_evaluate_all=self.evaluate_all_archs)
@@ -203,92 +285,41 @@ class Trainer:
         task_type, base_model_name = metadata['type'], metadata['base_model']
         best_params = study.best_trial.params.copy()
 
-        use_quant = best_params.pop("use_quant_feats")
-        base_features = config.BASE_FEATURES + \
-            (config.QUANT_FEATURES if use_quant else [])
+        # Get feature selection
+        use_quant = best_params.pop("use_quant_feats", True)
+        base_features = config.BASE_FEATURES + (config.QUANT_FEATURES if use_quant else [])
         X_train_fs, X_test_fs = X_train[base_features], X_test[base_features]
         y_train_gb, y_test_gb = y_train[config.TARGET_COLUMN_PROCESSED], y_test[config.TARGET_COLUMN_PROCESSED]
 
-        if base_model_name != 'quantile_ensemble':
-            X_train_fs = pd.get_dummies(
-                X_train_fs, drop_first=True, dummy_na=False).astype(float)
-            X_test_fs = pd.get_dummies(
-                X_test_fs, drop_first=True, dummy_na=False).astype(float)
-            X_test_fs = X_test_fs.reindex(
-                columns=X_train_fs.columns, fill_value=0)
-            features = X_train_fs.columns.tolist()
-        else:
-            features = base_features
+        # Create the model dynamically using the same system as hyperparameter search
+        model_class = metadata['class']
+        model = model_class(**best_params, random_state=config.RANDOM_STATE)
 
-        model, bin_edges, alloc = None, None, None
+        # Fit and predict using the clean BasePredictor interface
+        model.fit(X_train_fs, y_train_gb)
+        alloc = model.predict(X_test_fs)
 
-        if task_type == 'regression':
-            if base_model_name == 'quantile_ensemble':
-                alpha = best_params.pop("alpha")
-                gb_params = {'n_estimators': best_params["gb_n_estimators"],
-                             'max_depth': best_params["gb_max_depth"], 'learning_rate': best_params["gb_lr"], 'verbose': 0}
-                xgb_params = {'n_estimators': best_params["xgb_n_estimators"],
-                              'max_depth': best_params["xgb_max_depth"], 'learning_rate': best_params["xgb_lr"]}
-                model = QuantileEnsemblePredictor(
-                    alpha=alpha, safety=best_params["safety"], gb_params=gb_params, xgb_params=xgb_params)
-            elif base_model_name == 'xgboost':
-                model = xgb.XGBRegressor(
-                    **best_params, random_state=config.RANDOM_STATE)
-            elif base_model_name == 'lightgbm':
-                model = lgb.LGBMRegressor(
-                    **best_params, random_state=config.RANDOM_STATE, verbose=-1)
-
-            if base_model_name not in ['random_forest']:
-                model.fit(X_train_fs, y_train_gb)
-                alloc = model.predict(X_test_fs)
-        elif task_type == 'classification':
-            n_bins, strategy = best_params.pop(
-                "n_bins"), best_params.pop("strategy")
-            if 'lr' in best_params:
-                best_params['learning_rate'] = best_params.pop('lr')
-            min_val, max_val = y_train_gb.min(), y_train_gb.max()
-            if strategy == 'quantile':
-                try:
-                    _, bin_edges = pd.qcut(
-                        y_train_gb, q=n_bins, retbins=True, duplicates='drop')
-                except ValueError:
-                    bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-            elif strategy == 'uniform':
-                bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-            else:  # kmeans
-                kmeans = KMeans(n_clusters=n_bins, random_state=config.RANDOM_STATE, n_init='auto').fit(
-                    y_train_gb.values.reshape(-1, 1))
-                centers = sorted(kmeans.cluster_centers_.flatten())
-                edges = [(centers[i] + centers[i+1]) /
-                         2 for i in range(len(centers)-1)]
-                bin_edges = np.array([min_val] + edges + [max_val])
-
-            bin_edges = np.array(sorted(list(set(bin_edges))))
-            y_train_binned = pd.cut(
-                y_train_gb, bins=bin_edges, labels=False, include_lowest=True, right=True)
-
-            if base_model_name == 'lightgbm':
-                model = lgb.LGBMClassifier(
-                    **best_params, random_state=config.RANDOM_STATE, verbose=-1)
-            else:
-                model_class = {'xgboost': xgb.XGBClassifier, 'random_forest': RandomForestClassifier,
-                               'logistic_regression': LogisticRegression}[base_model_name]
-                model = model_class(
-                    **best_params, random_state=config.RANDOM_STATE)
-
-            model.fit(X_train_fs, y_train_binned)
-            pred_class = model.predict(X_test_fs).astype(int)
-            alloc = bin_edges[np.minimum(pred_class + 1, len(bin_edges) - 1)]
-
+        # Handle saving the model
         if save_model:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
+            
+            # For models that need feature encoding, get the encoded features
+            if hasattr(model, 'columns') and model.columns is not None:
+                features = model.columns
+            else:
+                features = base_features
             
             # Create and fit preprocessing pipeline
             preprocessor = ModelPreprocessor(
                 categorical_features=['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt'],
                 expected_features=features
             )
-            preprocessor.fit(X_train_fs)
+            # Fit preprocessor on encoded data for consistency
+            if hasattr(model, '_encode'):
+                X_train_encoded = model._encode(X_train_fs, fit=False)
+                preprocessor.fit(X_train_encoded)
+            else:
+                preprocessor.fit(X_train_fs)
             
             # Create deployable model wrapper
             deployable_model = DeployableModel(
@@ -296,7 +327,7 @@ class Trainer:
                 model_type=base_model_name,
                 task_type=task_type,
                 preprocessor=preprocessor,
-                bin_edges=bin_edges,
+                bin_edges=getattr(model, 'bin_edges', None),
                 metadata={
                     'training_features': features,
                     'model_family': family_name,
@@ -309,6 +340,7 @@ class Trainer:
             
             print(f"Saved deployable model artifact for '{family_name}'")
 
+        # Calculate metrics
         model_alloc_stats = calculate_allocation_categories(
             name=family_name, allocations=alloc, true_values=y_test_gb.values)
         hold_metrics = Trainer._allocation_metrics(alloc, y_test_gb.values)
@@ -323,8 +355,16 @@ class Trainer:
         Performs the core evaluation logic and returns the results as DataFrames.
         It does NOT save the champion result CSVs itself.
         """
-        valid_studies = [s for s in studies if hasattr(
-            s, 'best_trial') and s.best_trial]
+        def _has_valid_best_trial(study):
+            """Safely check if a study has a valid best trial."""
+            try:
+                return hasattr(study, 'best_trial') and study.best_trial is not None
+            except (ValueError, AttributeError):
+                # ValueError: raised when no trials are complete
+                # AttributeError: raised when best_trial doesn't exist
+                return False
+        
+        valid_studies = [s for s in studies if _has_valid_best_trial(s)]
         if not valid_studies:
             print("\nNo successful models found to evaluate.")
             return pd.DataFrame(), pd.DataFrame(), []

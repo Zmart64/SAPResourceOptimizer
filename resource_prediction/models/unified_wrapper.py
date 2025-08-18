@@ -6,7 +6,6 @@ import joblib
 from typing import Dict, Any, Union, Optional, List
 from pathlib import Path
 
-from .quantile_ensemble import QuantileEnsemblePredictor
 from .base import BasePredictor
 from ..preprocessing import ModelPreprocessor
 
@@ -89,52 +88,12 @@ class DeployableModel(BasePredictor):
         # Apply preprocessing using the fitted preprocessor
         X_processed = self.preprocessor.transform(X)
         
+        # For classification models, pass confidence_threshold to the model's predict method
+        # For regression models, the parameter is ignored
         if self.task_type == 'classification':
-            return self._predict_classification(X_processed, confidence_threshold)
-        else:  # regression
-            return self._predict_regression(X_processed)
-    def _predict_classification(self, X_processed: pd.DataFrame, confidence_threshold: float) -> np.ndarray:
-        """
-        Make classification predictions and convert to memory allocations.
-        
-        Args:
-            X_processed: Preprocessed input DataFrame
-            confidence_threshold: Confidence threshold for predictions
-            
-        Returns:
-            Array of memory allocation predictions
-        """
-        if self.bin_edges is None:
-            raise ValueError("Bin edges are required for classification models")
-        
-        # Make predictions
-        y_pred_probs = self.model.predict_proba(X_processed)
-        y_pred_classes = np.argmax(y_pred_probs, axis=1)
-        
-        # Apply confidence threshold adjustment
-        num_classes = len(self.model.classes_)
-        preds = []
-        for i, probs in enumerate(y_pred_probs):
-            pred = y_pred_classes[i]
-            if probs[pred] < confidence_threshold:
-                pred = min(pred + 1, num_classes - 1)
-            preds.append(pred)
-        
-        # Convert class predictions to allocations using bin edges
-        allocations = self.bin_edges[np.minimum(np.array(preds) + 1, len(self.bin_edges) - 1)]
-        return allocations
-    
-    def _predict_regression(self, X_processed: pd.DataFrame) -> np.ndarray:
-        """
-        Make regression predictions.
-        
-        Args:
-            X_processed: Preprocessed input DataFrame
-            
-        Returns:
-            Array of regression predictions
-        """
-        return self.model.predict(X_processed)
+            return self.model.predict(X_processed, confidence_threshold=confidence_threshold)
+        else:
+            return self.model.predict(X_processed)
     
     def get_model_info(self) -> Dict[str, Any]:
         """

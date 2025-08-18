@@ -2,28 +2,27 @@
 
 import pandas as pd
 import numpy as np
-import multiprocessing
 import optuna
 
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.cluster import KMeans
-import xgboost as xgb
-import lightgbm as lgb
 
 from resource_prediction.config import Config
-from resource_prediction.models import QuantileEnsemblePredictor
+from resource_prediction.models import (
+    QuantileEnsemblePredictor, XGBoostRegressor, XGBoostClassifier,
+    LightGBMRegressor, LightGBMClassifier, RandomForestClassifier, LogisticRegression
+)
 
 
 class OptunaOptimizer:
     """Orchestrates hyperparameter search for all model families using Optuna."""
 
-    def __init__(self, config: Config, X_train: pd.DataFrame, y_train: pd.DataFrame, task_type_filter: str | None = None):
+    def __init__(self, config: Config, X_train: pd.DataFrame, y_train: pd.DataFrame, 
+                 task_type_filter: str | None = None, model_families: list[str] | None = None):
         self.config = config
         self.X_train = X_train
         self.y_train_gb = y_train[config.TARGET_COLUMN_PROCESSED]
         self.task_type_filter = task_type_filter
+        self.model_families = model_families
         self.config.OPTUNA_DB_DIR.mkdir(exist_ok=True, parents=True)
 
     def _get_feature_set(self, use_quant_feats: bool):
@@ -50,122 +49,75 @@ class OptunaOptimizer:
         tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
 
-        if isinstance(model, QuantileEnsemblePredictor):
-            for tr_idx, te_idx in tscv.split(X):
-                model.fit(X.iloc[tr_idx], y.iloc[tr_idx])
-                allocs.extend(model.predict(X.iloc[te_idx]))
-                truths.extend(y.iloc[te_idx])
-        else:
-            X_encoded = pd.get_dummies(
-                X, drop_first=True, dummy_na=False).astype(float)
-            for tr_idx, te_idx in tscv.split(X_encoded):
-                X_train_fold, X_test_fold = X_encoded.iloc[tr_idx], X_encoded.iloc[te_idx]
-                y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
+        for tr_idx, te_idx in tscv.split(X):
+            X_train_fold, X_test_fold = X.iloc[tr_idx], X.iloc[te_idx]
+            y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
 
-                X_test_fold = X_test_fold.reindex(
-                    columns=X_train_fold.columns, fill_value=0)
-
-                model.fit(X_train_fold, y_train_fold)
-                allocs.extend(model.predict(X_test_fold))
-                truths.extend(y_test_fold)
-
-        metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
-        return self._business_score(metrics)
-
-    def _evaluate_classification(self, model, X, y, n_bins, strategy):
-        """Evaluates a classification model using time-series cross-validation."""
-        min_val, max_val = y.min(), y.max()
-        if strategy == 'quantile':
-            try:
-                _, bin_edges = pd.qcut(
-                    y, q=n_bins, retbins=True, duplicates='drop')
-            except ValueError:
-                bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-        elif strategy == 'uniform':
-            bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-        else:  # kmeans
-            kmeans = KMeans(n_clusters=n_bins, random_state=self.config.RANDOM_STATE, n_init='auto').fit(
-                y.values.reshape(-1, 1))
-            centers = sorted(kmeans.cluster_centers_.flatten())
-            edges = [(centers[i] + centers[i+1]) /
-                     2 for i in range(len(centers)-1)]
-            bin_edges = np.array([min_val] + edges + [max_val])
-
-        bin_edges = np.array(sorted(list(set(bin_edges))))
-        if len(bin_edges) < 2:
-            return 1e9
-
-        y_binned = pd.cut(y, bins=bin_edges, labels=False,
-                          include_lowest=True, right=True)
-        X_encoded = pd.get_dummies(
-            X, drop_first=True, dummy_na=False).astype(float)
-
-        tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
-        allocs, truths = [], []
-        for tr_idx, te_idx in tscv.split(X_encoded):
-            X_train_fold, X_test_fold = X_encoded.iloc[tr_idx], X_encoded.iloc[te_idx]
-            y_train_fold, y_test_fold = y_binned.iloc[tr_idx], y.iloc[te_idx]
-
-            X_test_fold = X_test_fold.reindex(
-                columns=X_train_fold.columns, fill_value=0)
-
+            # All wrapper models now use the same interface
             model.fit(X_train_fold, y_train_fold)
-            pred_class = model.predict(X_test_fold).astype(int)
-            allocs.extend(bin_edges[np.minimum(
-                pred_class + 1, len(bin_edges) - 1)])
+            allocs.extend(model.predict(X_test_fold))
             truths.extend(y_test_fold)
 
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics)
 
-    def _objective(self, trial, base_model, model_type):
+    def _evaluate_classification(self, model, X, y):
+        """Evaluates a classification model using time-series cross-validation."""
+        tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
+        allocs, truths = [], []
+        
+        for tr_idx, te_idx in tscv.split(X):
+            X_train_fold, X_test_fold = X.iloc[tr_idx], X.iloc[te_idx]
+            y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
+
+            # Fit and predict using the wrapper model's interface
+            model.fit(X_train_fold, y_train_fold)
+            pred_allocs = model.predict(X_test_fold)
+            
+            allocs.extend(pred_allocs)
+            truths.extend(y_test_fold)
+
+        metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
+        return self._business_score(metrics)
+
+    def _objective(self, trial, family_name):
         """The core objective function for Optuna to minimize."""
-        params = self.config.get_search_space(trial, base_model, model_type)
+        params = self.config.get_search_space(trial, family_name)
         use_quant_feats = params.pop("use_quant_feats")
         X_trial = self._get_feature_set(use_quant_feats)
         model = None
 
-        if model_type == "regression":
-            if base_model == 'quantile_ensemble':
-                alpha = params.pop("alpha")
-                gb_params = {'n_estimators': params["gb_n_estimators"],
-                             'max_depth': params["gb_max_depth"], 'learning_rate': params["gb_lr"]}
-                xgb_params = {'n_estimators': params["xgb_n_estimators"],
-                              'max_depth': params["xgb_max_depth"], 'learning_rate': params["xgb_lr"]}
-                model = QuantileEnsemblePredictor(
-                    alpha=alpha, safety=params["safety"], gb_params=gb_params, xgb_params=xgb_params, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'xgboost':
-                model = xgb.XGBRegressor(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'lightgbm':
-                model = lgb.LGBMRegressor(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
-
-            if model is None:
-                raise ValueError(f"Unknown regression model: {base_model}")
+        # Create model based on family name - each family gets exactly the parameters it needs
+        if family_name == 'qe_regression':
+            model = QuantileEnsemblePredictor(**params, random_state=self.config.RANDOM_STATE)
             return self._evaluate_regression(model, X_trial, self.y_train_gb)
-
-        else:  # Classification
-            n_bins, strategy = params.pop("n_bins"), params.pop("strategy")
-            if 'lr' in params:
-                params['learning_rate'] = params.pop('lr')
-
-            if base_model == 'xgboost':
-                model = xgb.XGBClassifier(
-                    **params, objective="multi:softmax", n_jobs=1, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'lightgbm':
-                model = lgb.LGBMClassifier(
-                    **params, objective="multiclass", n_jobs=1, random_state=self.config.RANDOM_STATE, verbose=-1)
-            elif base_model == 'random_forest':
-                model = RandomForestClassifier(
-                    **params, n_jobs=1, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'logistic_regression':
-                model = LogisticRegression(
-                    **params, max_iter=1000, n_jobs=1, random_state=self.config.RANDOM_STATE, multi_class="auto")
-
-            if model is None:
-                raise ValueError(f"Unknown classification model: {base_model}")
-            return self._evaluate_classification(model, X_trial, self.y_train_gb, n_bins, strategy)
+            
+        elif family_name == 'xgboost_regression':
+            model = XGBoostRegressor(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'lightgbm_regression':
+            model = LightGBMRegressor(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'xgboost_classification':
+            model = XGBoostClassifier(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'lightgbm_classification':
+            model = LightGBMClassifier(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'rf_classification':
+            model = RandomForestClassifier(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'lr_classification':
+            model = LogisticRegression(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        else:
+            raise ValueError(f"Unknown model family: {family_name}")
 
     def run(self):
         """
@@ -177,6 +129,8 @@ class OptunaOptimizer:
         all_studies = []
         for family_name, metadata in self.config.MODEL_FAMILIES.items():
             if self.task_type_filter and metadata['type'] != self.task_type_filter:
+                continue
+            if self.model_families and family_name not in self.model_families:
                 continue
 
             storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"
@@ -224,8 +178,7 @@ class OptunaOptimizer:
                 print(
                     f"Optimising {family_name.upper()} – running {remaining_trials} more trials...")
                 study.optimize(
-                    lambda trial: self._objective(
-                        trial, metadata['base_model'], metadata['type']),
+                    lambda trial: self._objective(trial, family_name),
                     n_trials=remaining_trials,
                     n_jobs=self.config.NUM_PARALLEL_WORKERS,
                     show_progress_bar=True

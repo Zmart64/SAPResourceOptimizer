@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from resource_prediction.config import Config
-from resource_prediction.models.quantile_ensemble import QuantileEnsemblePredictor
+from resource_prediction.models.implementations.quantile_ensemble import QuantileEnsemblePredictor
 from resource_prediction.models import DeployableModel
 from resource_prediction.preprocessing import ModelPreprocessor
 
@@ -141,7 +141,7 @@ def create_and_save_models(key_points):
             preprocessor = base_deployable.preprocessor
         else:
             raise ValueError("Not a DeployableModel")
-    except:
+    except Exception:
         # Load as old format and create preprocessor
         print("Loading base model from old format...")
         model_data = joblib.load(qe_model_path)

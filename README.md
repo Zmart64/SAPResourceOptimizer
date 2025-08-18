@@ -73,7 +73,7 @@ make dev
 - 🧠 **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
 - 🏗️ **Production Ready** - Complete serialization with metadata and preprocessing pipeline
 - 📦 **Extensible Design** - Easy to add new models following the same pattern
-- � **Type Safety** - Clear separation between model logic and deployment wrapper
+- ✨ **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
 
 ### Documentation
 
@@ -101,32 +101,101 @@ poetry run python serve_docs.py
 
 ## Imagined "how to use" workflow
 
-### 1. First run
+### 1. Simple Training (Recommended)
 
 ```console
 # Activate Poetry environment
 poetry shell
 
-# Run full pipeline for classification
-python main.py --model-type classification --run-search
+# Train all models with default parameters (simple and fast)
+python main.py --train
+
+# Train only classification models
+python main.py --train --task-type classification
+
+# Train specific model families
+python main.py --train --model-families xgboost_classification lightgbm_regression
 ```
 
-### 2. Subsequent run (skipping preprocessing)
+### 2. Advanced Training with Hyperparameter Search
 
 ```console
-# Now regression, but re-use preprocessed data from first run
+# Run full pipeline with hyperparameter optimization for classification
+python main.py --model-type classification --run-search
+
+# Now regression, but re-use preprocessed data from first run  
 python main.py --model-type regression --skip-preprocessing --run-search
+
+# Quick training with defaults (equivalent to --train)
+python main.py --run-search --use-defaults
+```
+
+### 3. Evaluation Only
+
+```console
+# Skip training and just evaluate existing models
+python main.py --evaluate-only
+```
+
+## Command Line Reference
+
+### Main Training Options
+
+| Command | Description | Use Case |
+|---------|-------------|----------|
+| `--train` | Train models with default parameters | Quick prototyping, baseline results |
+| `--run-search` | Full hyperparameter optimization | Best performance, production models |
+| `--run-search --use-defaults` | Train with defaults (same as `--train`) | Legacy compatibility |
+| `--evaluate-only` | Evaluate existing trained models | Testing, comparison |
+
+### Common Filtering Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--task-type` | Filter by regression or classification | `--task-type regression` |
+| `--model-families` | Train specific model families | `--model-families xgboost_regression lightgbm_classification` |
+| `--skip-preprocessing` | Reuse preprocessed data | `--skip-preprocessing --train` |
+
+### Quick Examples
+
+```console
+# Simple: Train all models with defaults
+python main.py --train
+
+# Focused: Train only XGBoost models  
+python main.py --train --model-families xgboost_regression xgboost_classification
+
+# Fast: Reuse preprocessing from previous run
+python main.py --train --skip-preprocessing
+
+# Advanced: Full hyperparameter search for specific models
+python main.py --run-search --model-families lightgbm_regression
 ```
 
 ## Features
 
 - **Multiple ML Approaches**: Regression and classification models for memory prediction
+- **Flexible Training Options**: Simple `--train` mode or advanced `--run-search` with hyperparameter optimization
 - **Automated Hyperparameter Tuning**: Optuna-based optimization with parallel execution
 - **Business-Focused Metrics**: Cost-aware objective function balancing failures vs waste
 - **Rich Feature Engineering**: Temporal, categorical, and rolling window features
 - **Unified Model Architecture**: Standardized BasePredictor interface for all models
 - **Interactive Web Applications**: Streamlit-based dashboards for model exploration
 - **Production-Ready**: Poetry dependency management, comprehensive testing, and documentation
+
+### Training Modes
+
+**Simple Training (`--train`)**:
+- Train models with default parameters (no hyperparameter search)
+- 90% simpler than `--run-search --use-defaults`
+- Perfect for quick prototyping and baseline results
+- Example: `python main.py --train --model-families xgboost_regression`
+
+**Advanced Training (`--run-search`)**:
+- Full hyperparameter optimization using Optuna
+- Best model performance but slower execution
+- Use `--use-defaults` to skip search and use default parameters
+- Example: `python main.py --run-search --model-families xgboost_regression`
 
 ## Supported Models
 
@@ -152,25 +221,134 @@ costly than over-allocation (wasting resources).
 
 ### Model Architecture
 
-The project uses a clean model architecture:
+The project uses a clean, consistent model architecture:
 
 - **BasePredictor Interface**: All models implement consistent `fit()` and `predict()` methods
 - **DeployableModel Wrapper**: Production-ready wrapper with integrated preprocessing
 - **ModelPreprocessor**: Handles feature engineering automatically
+- **Unified Parameter Handling**: Both hyperparameter search and evaluation use the same wrapper models
+
+### Directory Structure
+
+The models are organized for clarity and maintainability:
+
+```
+resource_prediction/models/
+├── __init__.py              # Public API exports
+├── base.py                  # BasePredictor interface
+├── unified_wrapper.py       # DeployableModel for production
+└── implementations/         # Specific model implementations
+    ├── lightgbm_models.py
+    ├── quantile_ensemble.py
+    ├── sklearn_models.py
+    └── xgboost_models.py
+```
+
+**Design Principles:**
+- **Separation of Concerns**: Infrastructure files (`base.py`, `unified_wrapper.py`) are separated from specific implementations
+- **Clear Organization**: All concrete model implementations are grouped in the `implementations/` directory
+- **Simple Imports**: Users import from `resource_prediction.models` regardless of internal structure
+- **Easy Extension**: New models go in `implementations/` with import added to main `__init__.py`
 
 ## How to Extend
 
 ### Adding New Models
 
-To add a new model type:
+The architecture makes it simple to add new models. Both hyperparameter search and final evaluation use the same wrapper classes, eliminating parameter filtering complexity.
 
-1. **Implement BasePredictor interface** in `resource_prediction/models/`
-2. **Add to model registry** in `resource_prediction/models/__init__.py`  
-3. **Configure model family** in `resource_prediction/config.py`
-4. **Define search space** in `config.py`
-5. **Add trainer integration** in `resource_prediction/training/trainer.py`
+**Step-by-Step Guide:**
 
-See the documentation for detailed examples.
+1. **Create Model Wrapper** in `resource_prediction/models/implementations/`
+   ```python
+   from ..base import BasePredictor
+   import pandas as pd
+   import numpy as np
+   
+   class MyNewModel(BasePredictor):
+       def __init__(self, param1: int = 100, param2: float = 0.1, random_state: int = 42, **kwargs):
+           self.param1 = param1
+           self.param2 = param2
+           self.random_state = random_state
+           # Your model initialization here
+           
+       def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+           # Implement training logic
+           pass
+           
+       def predict(self, X: pd.DataFrame) -> np.ndarray:
+           # Implement prediction logic
+           pass
+   ```
+
+2. **Register Model** in `resource_prediction/models/__init__.py`
+   ```python
+   from .implementations.my_new_model import MyNewModel
+   
+   __all__ = [
+       "BasePredictor",
+       "MyNewModel",  # Add your model here
+       # ... other models
+   ]
+   ```
+
+3. **Configure Model Family** in `resource_prediction/config.py`
+   ```python
+   MODEL_FAMILIES = {
+       "my_new_model_regression": {
+           "type": "regression", 
+           "base_model": "my_new_model",
+           "class": MyNewModel  # Reference for dynamic instantiation
+       },
+       # ... other models
+   }
+   ```
+
+4. **Define Hyperparameter Space** in `config.py`
+   ```python
+   HYPERPARAMETER_CONFIGS = {
+       "my_new_model_regression": {  # Use the full family name
+           "use_quant_feats": {"choices": [True, False], "default": True},  # If needed
+           "param1": {"min": 50, "max": 200, "type": "int", "default": 100},
+           "param2": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+           # Only include parameters your model actually uses!
+       }
+   }
+   ```
+
+5. **Add Model Class Reference** in `config.py`
+   ```python
+   MODEL_FAMILIES = {
+       "my_new_model_regression": {
+           "type": "regression", 
+           "base_model": "my_new_model",
+           "class": MyNewModel  # Add class reference for dynamic instantiation
+       },
+       # ... other models
+   }
+   ```
+
+6. **Add to Hyperparameter Search** in `resource_prediction/training/hyperparameter.py`
+   ```python
+   # In the _objective method, add your family name:
+   elif family_name == 'my_new_model_regression':
+       model = MyNewModel(**params, random_state=self.config.RANDOM_STATE)
+       return self._evaluate_regression(model, X_trial, self.y_train_gb)
+   ```
+
+**That's it!** The system now uses dynamic model instantiation - no hardcoded model creation needed in evaluation!
+
+**Key Benefits of This Architecture:**
+- ✅ **No Parameter Filtering** - Models accept parameters directly from hyperparameter search
+- ✅ **Consistent Interface** - Same model class used in search and evaluation  
+- ✅ **Clean Implementation** - Models handle their own parameter validation
+- ✅ **Dynamic Instantiation** - Evaluation uses `metadata['class']` for automatic model creation
+- ✅ **No Hardcoded Logic** - Adding models doesn't require updating evaluation code
+
+**Model-Specific Parameters**: Only include parameters that your specific model actually uses:
+- Classification models automatically get `n_bins`, `strategy` from the `classification_common` config
+- Regression models only need parameters relevant to their algorithm
+- No need to handle `alpha` unless your model does quantile prediction
+- Use `**kwargs` in your `__init__` to gracefully handle unexpected parameters
 
 ### Customizing Business Logic
 
