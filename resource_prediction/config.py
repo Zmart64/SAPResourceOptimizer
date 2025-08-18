@@ -109,6 +109,11 @@ class Config:
             "base_model": "lgb_cat_quantile_ensemble",
             "class": _import_model_class("resource_prediction.models", "LGBCatQuantileEnsemble"),
         },
+        "xgb_xgb_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_xgb_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBXGBQuantileEnsemble"),
+        },
         "xgboost_classification": {
             "type": "classification",
             "base_model": "xgboost",
@@ -268,6 +273,34 @@ class Config:
                 "type": "float",
                 "log": True,
                 "default": 0.05,
+            },
+        },
+        # XGBoost + XGBoost Specialized Ensemble
+        "xgb_xgb_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
             },
         },
         # XGBoost Regression - only XGBoost regression parameters

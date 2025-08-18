@@ -1,0 +1,2 @@
+model,score_cv,use_quant_feats,alpha,safety,conservative_quantile,conservative_n_estimators,conservative_max_depth,conservative_lr,aggressive_quantile,aggressive_n_estimators,aggressive_max_depth,aggressive_lr,under_pct_hold,mean_gb_wasted_hold,total_over_pct_hold,score_hold
+xgb_xgb_ensemble,73.07384845495147,True,0.95,1.05,0.98,200,8,0.03,0.9,500,5,0.08,1.2926129898502572,42.62517088163068,54.609968802088304,61.07303375133959
