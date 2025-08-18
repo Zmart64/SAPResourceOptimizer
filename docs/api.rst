@@ -11,25 +11,39 @@ Configuration
    :undoc-members:
    :show-inheritance:
 
-Model Interface
----------------
+Model Architecture
+------------------
 
 The unified model architecture provides a consistent interface for all prediction models.
+
+BasePredictor Interface
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: resource_prediction.models.base
    :members:
    :undoc-members:
    :show-inheritance:
 
+DeployableModel Wrapper
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: resource_prediction.models.unified_wrapper
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Model Implementations
+~~~~~~~~~~~~~~~~~~~~~
+
 .. automodule:: resource_prediction.models.quantile_ensemble
    :members:
    :undoc-members:
    :show-inheritance:
 
-Data Processing
----------------
+Preprocessing Pipeline
+----------------------
 
-.. automodule:: resource_prediction.data_processing.preprocessor
+.. automodule:: resource_prediction.preprocessing
    :members:
    :undoc-members:
    :show-inheritance:

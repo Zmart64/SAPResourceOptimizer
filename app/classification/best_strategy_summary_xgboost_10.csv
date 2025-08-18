@@ -1,2 +1,0 @@
-model_name,bin_edges,best_params_from_grid,optimization_score
-xgboost,"[0.0283, 37.5674, 75.1064, 112.6455, 150.1845, 187.7236, 225.2626, 262.8017]","{'n_bins': 7, 'strategy': 'uniform', 'confidence_threshold': 0.8570683999146191, 'learning_rate': 0.040215038629349734, 'max_depth': 5, 'subsample': 0.9120795168464906, 'n_estimators': 200}",112.64502206093678

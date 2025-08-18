@@ -20,12 +20,13 @@ under-allocation failures and memory waste.
 
 **System Architecture:**
 
-The project follows a clean architecture with:
+The project follows a clean three-layer architecture:
 
-- **Unified Model Interface**: All models implement ``BasePredictor`` for consistency
-- **Separation of Concerns**: Model definitions separate from trained artifacts
-- **Interactive Applications**: Streamlit dashboards for real-time prediction and analysis
-- **Backward Compatibility**: Existing code continues to work unchanged
+- **DeployableModel Layer**: Production wrapper with integrated preprocessing and metadata
+- **BasePredictor Layer**: Abstract interface ensuring consistent model behavior  
+- **Implementation Layer**: Concrete ML algorithms (XGBoost, LightGBM, Random Forest, Logistic Regression, Quantile Ensemble)
+
+This architecture enables seamless integration of new models while maintaining production readiness and type safety.
 
 Quick Start
 -----------

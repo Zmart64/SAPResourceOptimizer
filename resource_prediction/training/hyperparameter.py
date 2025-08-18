@@ -170,7 +170,7 @@ class OptunaOptimizer:
     def run(self):
         """
         Runs the hyperparameter search for all relevant model families. This method
-        provides backward compatibility by first trying to load existing timestamped
+        handles study resumption by first trying to load existing timestamped
         studies, then falls back to creating/loading studies with a clean,
         deterministic name.
         """
@@ -187,16 +187,16 @@ class OptunaOptimizer:
                 try:
                     all_summaries = optuna.study.get_all_study_summaries(
                         storage=storage_url)
-                    legacy_summaries = [
+                    timestamped_summaries = [
                         s for s in all_summaries if s.study_name.startswith(f"{family_name}_")]
 
-                    if legacy_summaries:
-                        best_legacy_study = max(
-                            legacy_summaries, key=lambda s: s.n_trials)
+                    if timestamped_summaries:
+                        best_timestamped_study = max(
+                            timestamped_summaries, key=lambda s: s.n_trials)
                         print(
-                            f"Resuming existing legacy study '{best_legacy_study.study_name}' for model family '{family_name}'.")
+                            f"Resuming existing timestamped study '{best_timestamped_study.study_name}' for model family '{family_name}'.")
                         study = optuna.load_study(
-                            study_name=best_legacy_study.study_name,
+                            study_name=best_timestamped_study.study_name,
                             storage=storage_url
                         )
                 except Exception as e:
