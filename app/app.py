@@ -98,19 +98,6 @@ def run_model(model_path, model_name, confidence_threshold=0.6):
                         delay_seconds=delay_seconds,
                         show_class=show_class)
 
-# Legacy function kept for backward compatibility - now uses the standard interface
-def run_classification(model_path, model_name):
-    """Runs the app for classification models (legacy interface)"""
-    return run_model(model_path, model_name, confidence_threshold=0.6)
-
-
-# Legacy function kept for backward compatibility - now uses the standard interface  
-def run_qe(model_path):
-    """Runs the app for QE models (legacy interface)"""
-    model_name = f"QE Model ({model_path.split('/')[-1].replace('.pkl', '')})"
-    return run_model(model_path, model_name, confidence_threshold=0.6)
-
-
 def main():
     """Main Streamlit application entry point"""
     

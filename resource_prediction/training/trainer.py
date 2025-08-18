@@ -83,7 +83,7 @@ class Trainer:
     def _get_family_name_from_study(self, study) -> str:
         """
         Robustly extracts the base family name from a study object, handling both
-        clean names ('xgboost_regression') and legacy timestamped names
+        clean names ('xgboost_regression') and timestamped names
         ('xgboost_regression_20250812').
         """
         for family_key in self.config.MODEL_FAMILIES:
@@ -238,7 +238,7 @@ class Trainer:
                 model = lgb.LGBMRegressor(
                     **best_params, random_state=config.RANDOM_STATE, verbose=-1)
 
-            if base_model_name != 'random_forest':
+            if base_model_name not in ['random_forest']:
                 model.fit(X_train_fs, y_train_gb)
                 alloc = model.predict(X_test_fs)
         elif task_type == 'classification':

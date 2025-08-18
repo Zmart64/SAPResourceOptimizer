@@ -160,7 +160,3 @@ class QuantileEnsemblePredictor(BasePredictor):
             if hasattr(self, key):
                 setattr(self, key, value)
         return self
-
-
-# For backward compatibility, create an alias with the old naming convention
-QEPredictor = QuantileEnsemblePredictor

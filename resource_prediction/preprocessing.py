@@ -15,7 +15,7 @@ class ModelPreprocessor(BaseEstimator, TransformerMixin):
     - Categorical encoding (one-hot)
     - Feature alignment and ordering
     - Missing value handling
-    - Feature mapping for backward compatibility
+    - Feature mapping for consistency
     """
     
     def __init__(

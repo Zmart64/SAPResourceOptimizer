@@ -65,7 +65,7 @@ class SimulationDataLoader:
             simulation_df[self.config.TARGET_COLUMN_PROCESSED] = y_test[self.config.TARGET_COLUMN_PROCESSED].reset_index(drop=True)
             simulation_df['memreq_gb'] = df_test_raw['memreq_gb'].reset_index(drop=True)
             
-            # Add backward compatibility for classification model feature names
+            # Add feature mapping for consistency
             if 'lag_1_grouped' in simulation_df.columns:
                 simulation_df['lag_max_rss_g1_w1'] = simulation_df['lag_1_grouped']
             
@@ -120,6 +120,6 @@ def get_target_columns():
     return loader.get_target_columns()
 
 
-# Backward compatibility aliases
+# Function aliases for convenience
 load_unified_simulation_data = load_simulation_data
 UnifiedDataLoader = SimulationDataLoader

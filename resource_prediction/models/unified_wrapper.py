@@ -29,7 +29,7 @@ class DeployableModel(BasePredictor):
         model: Any, 
         model_type: str, 
         task_type: str,
-        preprocessor: Optional[ModelPreprocessor] = None,
+        preprocessor: ModelPreprocessor,
         bin_edges: Optional[np.ndarray] = None,
         metadata: Optional[Dict[str, Any]] = None
     ):
@@ -50,14 +50,6 @@ class DeployableModel(BasePredictor):
         self.preprocessor = preprocessor
         self.bin_edges = bin_edges
         self.metadata = metadata or {}
-        
-        # For backward compatibility with old models without preprocessor
-        if self.preprocessor is None:
-            # Create a legacy preprocessor from the old features format
-            features = self.metadata.get('features', [])
-            self.preprocessor = ModelPreprocessor(expected_features=features)
-            # Mark as legacy to handle differently
-            self.metadata['legacy_model'] = True
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> 'DeployableModel':
         """
@@ -72,11 +64,11 @@ class DeployableModel(BasePredictor):
             Self for method chaining
         """
         # Fit preprocessor if not already fitted
-        if self.preprocessor is not None and not getattr(self.preprocessor, 'is_fitted_', False):
+        if not getattr(self.preprocessor, 'is_fitted_', False):
             self.preprocessor.fit(X)
         
         # Preprocess the training data
-        X_processed = self.preprocessor.transform(X) if self.preprocessor else X
+        X_processed = self.preprocessor.transform(X)
         
         # Fit the underlying model
         self.model.fit(X_processed, y, **fit_params)
@@ -94,92 +86,13 @@ class DeployableModel(BasePredictor):
         Returns:
             Array of predictions (allocations for classification, direct values for regression)
         """
-        # Apply preprocessing
-        if self.preprocessor is not None:
-            X_processed = self.preprocessor.transform(X)
-        else:
-            # Legacy fallback for old models
-            X_processed = self._legacy_preprocess_features(X)
+        # Apply preprocessing using the fitted preprocessor
+        X_processed = self.preprocessor.transform(X)
         
         if self.task_type == 'classification':
             return self._predict_classification(X_processed, confidence_threshold)
         else:  # regression
             return self._predict_regression(X_processed)
-    
-    def _legacy_preprocess_features(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Legacy preprocessing for backward compatibility with old models.
-        
-        Args:
-            X: Raw input DataFrame
-            
-        Returns:
-            Preprocessed DataFrame ready for model prediction
-        """
-        X_processed = X.copy()
-        
-        if self.model_type == 'quantile_ensemble':
-            # QE models handle their own preprocessing internally
-            return X_processed
-        else:
-            # For classification models, apply one-hot encoding and feature alignment
-            return self._legacy_preprocess_classification_features(X_processed)
-    
-    def _legacy_preprocess_classification_features(self, X: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply preprocessing for classification models (LightGBM, XGBoost, etc.).
-        
-        Args:
-            X: Raw input DataFrame
-            
-        Returns:
-            Preprocessed DataFrame with one-hot encoding and aligned features
-        """
-        X_processed = X.copy()
-        
-        # Apply one-hot encoding for categorical features that the model expects
-        categorical_features = ['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt']
-        
-        for cat_feature in categorical_features:
-            if cat_feature in X_processed.columns:
-                # Get dummies for the categorical feature
-                dummies = pd.get_dummies(X_processed[cat_feature], prefix=cat_feature, dtype=int)
-                
-                # Add dummy columns to X_processed
-                for dummy_col in dummies.columns:
-                    X_processed[dummy_col] = dummies[dummy_col]
-        
-        # Add feature mapping for compatibility
-        if 'lag_max_rss_g1_w1' in X_processed.columns and 'lag_max_rss_global_w5' not in X_processed.columns:
-            X_processed['lag_max_rss_global_w5'] = X_processed['lag_max_rss_g1_w1']
-        
-        # Handle missing one-hot encoded features by creating them with zeros
-        legacy_features = self.metadata.get('features', [])
-        for feature in legacy_features:
-            if feature not in X_processed.columns:
-                # Check if it's a one-hot encoded categorical feature
-                categorical_prefixes = ['location_', 'component_', 'makeType_', 'bp_arch_', 'bp_compiler_', 'bp_opt_']
-                for cat_prefix in categorical_prefixes:
-                    if feature.startswith(cat_prefix):
-                        X_processed[feature] = 0
-                        break
-        
-        # Select only the features the model expects and ensure correct order
-        available_features = [f for f in legacy_features if f in X_processed.columns]
-        
-        if len(available_features) < len(legacy_features) * 0.5:  # Require at least 50% of features
-            raise ValueError(f"Too few matching features: {len(available_features)}/{len(legacy_features)}")
-        
-        X_model = X_processed[legacy_features].copy()
-        
-        # Convert categorical columns to numeric if needed for prediction
-        for col in X_model.columns:
-            if X_model[col].dtype.name == 'category':
-                X_model[col] = X_model[col].astype(float)
-        
-        X_model = X_model.fillna(0)
-        return X_model
-    
     def _predict_classification(self, X_processed: pd.DataFrame, confidence_threshold: float) -> np.ndarray:
         """
         Make classification predictions and convert to memory allocations.

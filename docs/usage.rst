@@ -70,24 +70,25 @@ The resource prediction pipeline is designed to predict peak memory requirements
 3. **Model Training**: Multiple ML algorithms (regression and classification)
 4. **Evaluation**: Business-focused metrics and final model selection
 
-**Unified Model Architecture:**
+**DeployableModel Architecture:**
 
-The project uses a standardized :class:`~resource_prediction.models.base.BasePredictor` interface that ensures consistency across all model implementations:
+The project uses a sophisticated deployment architecture that separates concerns while providing a unified interface:
 
-- **Single Source of Truth**: All model definitions in ``resource_prediction/models/``
-- **Clean Separation**: Model code separate from trained artifacts (``artifacts/trained_models/``)
-- **Backward Compatibility**: Existing imports continue to work
-- **Extensible Design**: New models implement the same interface
+- **BasePredictor Interface**: All models implement this abstract base class ensuring consistent ``fit()`` and ``predict()`` methods  
+- **DeployableModel Wrapper**: Production-ready wrapper that combines model + preprocessing + metadata
+- **ModelPreprocessor Pipeline**: Sklearn-style preprocessing with ``fit()`` and ``transform()`` methods
+- **Separation of Concerns**: Model logic, preprocessing, and deployment are cleanly separated
+- **Extensible Design**: New models integrate seamlessly by implementing ``BasePredictor``
 
 .. code-block:: python
 
-   # Import any model using unified interface
-   from resource_prediction.models import QEPredictor, QuantileEnsemblePredictor
+   # Import models using the new architecture
+   from resource_prediction.models import BasePredictor, DeployableModel
+   from resource_prediction.preprocessing import ModelPreprocessor
    
-   # All models implement the same interface
-   model = QEPredictor()  # Backward compatible
-   model.fit(X_train, y_train)
-   predictions = model.predict(X_test)
+   # Load a production-ready model with integrated preprocessing
+   model = DeployableModel.load("artifacts/trained_models/lightgbm_regression.pkl")
+   predictions = model.predict(raw_dataframe)  # Preprocessing happens automatically
 
 First run
 ---------
@@ -133,13 +134,12 @@ The pipeline supports two main approaches to memory prediction:
    
    - **Quantile Ensemble**: Combines GradientBoosting and XGBoost quantile regressors for conservative predictions
    - **XGBoost Regression**: Direct memory prediction with L1 regularization
-   - **Random Forest Regression**: Ensemble method for robust predictions
+   - **LightGBM Regression**: Fast gradient boosting with memory efficiency
 
 2. **Classification Models**: Predict memory bins/categories
    
    - **XGBoost Classifier**: Multi-class prediction with gradient boosting
    - **LightGBM Classifier**: Fast gradient boosting with leaf-wise tree growth
-   - **CatBoost Classifier**: Handles categorical features automatically
    - **Random Forest Classifier**: Ensemble classification approach
    - **Logistic Regression**: Linear baseline for multi-class prediction
 
@@ -210,96 +210,188 @@ additional families automatically when the configuration is updated.
 
 **Adding New Models**
 
-The unified architecture makes extending the system straightforward. Here's the complete process using an example `MyPredictor` model:
+The system is designed for easy extensibility with new model types. Here's a comprehensive guide to adding a new model:
 
-1. **Create model implementation** extending :class:`~resource_prediction.models.base.BasePredictor`:
+**Step 1: Implement the BasePredictor Interface**
+
+Create your model class by extending the :class:`~resource_prediction.models.base.BasePredictor` abstract class. This ensures consistency across the system:
 
 .. code-block:: python
 
-   # resource_prediction/models/my_model.py
+   # resource_prediction/models/my_new_model.py
    from .base import BasePredictor
-   
-   class MyPredictor(BasePredictor):
-       def __init__(self, param1=0.5, param2=50, **kwargs):
+   import pandas as pd
+   import numpy as np
+
+   class MyNewModel(BasePredictor):
+       """Example new model implementation."""
+       
+       def __init__(self, param1=100, param2=0.1, task_type='regression', **kwargs):
            self.param1 = param1
            self.param2 = param2
+           self.task_type = task_type
+           self.is_fitted = False
            
-       def fit(self, X, y, **fit_params):
-           # Your implementation
-           pass
-       
-       def predict(self, X):
-           # Your implementation
-           pass
+       def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params):
+           """Train the model on the provided data."""
+           # Your training logic here
+           # Example: self.model = SomeLibrary.Model(param1=self.param1)
+           # self.model.fit(X.values, y.values)
+           self.is_fitted = True
+           return self
+           
+       def predict(self, X: pd.DataFrame) -> np.ndarray:
+           """Make predictions on new data."""
+           if not self.is_fitted:
+               raise ValueError("Model must be fitted before prediction")
+           # Your prediction logic here
+           # return self.model.predict(X.values)
+           return np.random.random(len(X))  # Placeholder
+           
+       def get_params(self) -> dict:
+           """Return model parameters for hyperparameter optimization."""
+           return {
+               'param1': self.param1,
+               'param2': self.param2,
+               'task_type': self.task_type
+           }
 
-2. **Register in model registry** (``resource_prediction/models/__init__.py``):
+**Step 2: Register the Model**
+
+Add your model to the module registry:
 
 .. code-block:: python
 
-   from .my_model import MyPredictor
-   
+   # resource_prediction/models/__init__.py
+   from .my_new_model import MyNewModel
+
    __all__ = [
        "BasePredictor",
-       "QEPredictor", 
+       "DeployableModel", 
        "QuantileEnsemblePredictor",
-       "MyPredictor"  # Add your new model
+       "MyNewModel"  # Add your new model here
    ]
 
-3. **Choose a base_model identifier** and add to ``Config.MODEL_FAMILIES`` in ``resource_prediction/config.py``:
+**Step 3: Configure Model Families**
+
+Add your model to the configuration with appropriate family names:
 
 .. code-block:: python
 
+   # resource_prediction/config.py - Add to MODEL_FAMILIES dictionary
    MODEL_FAMILIES = {
-       # Existing models...
-       "my_model_regression": {"type": "regression", "base_model": "my_custom_model"},
-       "my_model_classification": {"type": "classification", "base_model": "my_custom_model"},
+       # ... existing models ...
+       "my_new_model_regression": {"type": "regression", "base_model": "my_new_model"},
+       "my_new_model_classification": {"type": "classification", "base_model": "my_new_model"},
    }
 
-   # Note: "my_custom_model" is your chosen identifier string - it can be anything
-   # This string will be used to connect your config to your model instantiation
+**Step 4: Define Hyperparameter Search Space**
 
-4. **Add hyperparameter search space** to ``Config.get_search_space()`` method using your identifier:
-
-.. code-block:: python
-
-   if base_model == 'my_custom_model':  # Must match your identifier from step 3
-       return {
-           "param1": trial.suggest_float("param1", 0.1, 1.0),
-           "param2": trial.suggest_int("param2", 10, 100),
-           "use_quant_feats": trial.suggest_categorical("use_quant_feats", [True, False]),
-           # Add your hyperparameters
-       }
-
-5. **Add model instantiation** in ``resource_prediction/training/hyperparameter.py`` in the ``_objective`` method:
+Add search space configuration to enable hyperparameter optimization:
 
 .. code-block:: python
 
-   # In the regression section (around line 129):
-   if base_model == 'my_custom_model':  # Must match your identifier
-       model = MyPredictor(
-           param1=params["param1"],
-           param2=params["param2"],
-           random_state=self.config.RANDOM_STATE
-       )
+   # resource_prediction/config.py - Add to get_search_space() method
+   def get_search_space(self, family_name: str, trial, use_quant: bool = True) -> dict:
+       # ... existing code ...
+       
+       if base_model == 'my_new_model':
+           model_params = {
+               "param1": trial.suggest_int("param1", 50, 200),
+               "param2": trial.suggest_float("param2", 0.01, 1.0, log=True),
+           }
+           return {**common_params, **model_params} if task_type == 'classification' else model_params
+
+**Step 5: Add Trainer Integration**
+
+Update the trainer to handle your new model type:
+
+.. code-block:: python
+
+   # resource_prediction/training/trainer.py - Add to _evaluate_single_champion()
    
-   # And/or in the classification section (around line 153):
-   elif base_model == 'my_custom_model':  # Must match your identifier  
-       model = MyPredictor(
-           param1=params["param1"],
-           param2=params["param2"],
-           random_state=self.config.RANDOM_STATE
+   # For regression models (around line 330):
+   elif base_model_name == 'my_new_model':
+       from resource_prediction.models.my_new_model import MyNewModel
+       model = MyNewModel(
+           task_type='regression',
+           **best_params
        )
 
-**Key Points:**
+   # For classification models (around line 360):
+   elif base_model_name == 'my_new_model':
+       from resource_prediction.models.my_new_model import MyNewModel
+       model = MyNewModel(
+           task_type='classification',
+           **best_params
+       )
 
-- The ``base_model`` string (e.g., ``"my_custom_model"``) is just an identifier you choose
-- This string must be consistent across ``config.py``, ``get_search_space()``, and ``hyperparameter.py``
-- The training system uses explicit if-elif statements to map your string to your model class
-- Your model class name (e.g., ``MyPredictor``) can be different from your identifier string
+**Step 6: Test Your Integration**
 
-5. **Update command-line options** in ``main.py`` if needed (optional for most cases)
+Verify your model works with the pipeline:
 
-The :class:`~resource_prediction.models.base.BasePredictor` interface ensures all models have consistent ``fit()`` and ``predict()`` methods, making them interchangeable throughout the system.
+.. code-block:: console
+
+   # Test with hyperparameter search
+   poetry run python main.py --run-search --task-type regression
+
+   # Test specific model family
+   poetry run python main.py --run-search --model-family my_new_model_regression
+
+**What You Get Automatically:**
+
+Once integrated, your model automatically receives:
+
+- ✅ **Hyperparameter Optimization**: Optuna-based search with your defined parameter space
+- ✅ **Cross-Validation**: Automatic k-fold evaluation with business metrics
+- ✅ **DeployableModel Wrapper**: Production-ready packaging with preprocessing
+- ✅ **Model Serialization**: Automatic saving with metadata and version info
+- ✅ **Evaluation Metrics**: Business scoring, accuracy, and comparison charts
+- ✅ **Integration Testing**: Compatibility with simulation and web applications
+
+**Advanced Customization:**
+
+For more sophisticated models, you can:
+
+- **Custom Preprocessing**: Override preprocessing in your model's predict method
+- **Ensemble Integration**: Combine with existing models in the QuantileEnsemble
+- **Custom Metrics**: Add model-specific evaluation metrics
+- **Parameter Dependencies**: Create conditional search spaces based on other parameters
+
+**System Architecture Overview**
+
+The project follows a clean three-layer architecture:
+
+**1. Model Layer** (``resource_prediction/models/``)
+   - **BasePredictor**: Abstract interface ensuring consistent model behavior
+   - **Concrete Models**: XGBoost, LightGBM, Random Forest, Logistic Regression, Quantile Ensemble
+   - **DeployableModel**: Production wrapper with integrated preprocessing
+
+**2. Training Layer** (``resource_prediction/training/``)
+   - **HyperparameterSearcher**: Optuna-based optimization with business metrics
+   - **Trainer**: Model evaluation, cross-validation, and champion selection
+   - **Business Scoring**: Domain-specific metrics (5:1 penalty for under-allocation)
+
+**3. Application Layer** (``app/``)
+   - **Streamlit Interface**: Interactive model comparison and simulation
+   - **Data Pipeline**: Automated preprocessing and feature engineering
+   - **Production Integration**: Direct model loading and prediction serving
+
+**Key Benefits:**
+
+- **Consistency**: All models implement the same interface via BasePredictor
+- **Flexibility**: Easy to swap models without changing application code  
+- **Production-Ready**: DeployableModel ensures models include all preprocessing
+- **Extensible**: Adding new models requires minimal code changes
+
+**Data Flow:**
+
+1. **Raw Data** → **ModelPreprocessor** → **Engineered Features**
+2. **Features** → **BasePredictor.fit()** → **Trained Model**
+3. **Trained Model** → **DeployableModel** → **Production Artifact**
+4. **New Data** → **DeployableModel.predict()** → **Memory Allocations**
+
+This architecture ensures that models are interchangeable, preprocessing is consistent, and the system remains maintainable as new model types are added.
 
 **Customizing Business Logic**
 
