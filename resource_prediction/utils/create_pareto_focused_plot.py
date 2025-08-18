@@ -17,6 +17,8 @@ sys.path.append(str(Path(__file__).parent))
 
 from resource_prediction.config import Config
 from resource_prediction.models.quantile_ensemble import QuantileEnsemblePredictor
+from resource_prediction.models import DeployableModel
+from resource_prediction.preprocessing import ModelPreprocessor
 
 
 def create_focused_pareto_plot():
@@ -128,9 +130,34 @@ def create_and_save_models(key_points):
     
     # Load the base trained model
     print("Loading base trained model...")
-    model_data = joblib.load(config.MODELS_DIR / "qe_regression.pkl")
-    base_model = model_data['model']
-    features = model_data['features']
+    qe_model_path = config.MODELS_DIR / "qe_regression.pkl"
+    
+    # Try to load as DeployableModel first, fallback to old format
+    try:
+        base_deployable = joblib.load(qe_model_path)
+        if isinstance(base_deployable, DeployableModel):
+            print("Base model is in DeployableModel format")
+            base_model = base_deployable.model
+            preprocessor = base_deployable.preprocessor
+        else:
+            raise ValueError("Not a DeployableModel")
+    except:
+        # Load as old format and create preprocessor
+        print("Loading base model from old format...")
+        model_data = joblib.load(qe_model_path)
+        base_model = model_data['model']
+        features = model_data.get('features', [])
+        
+        # Create preprocessor (reconstruct from training data)
+        print("Reconstructing preprocessor...")
+        X_train = pd.read_pickle(config.X_TRAIN_PATH)
+        preprocessor = ModelPreprocessor(
+            categorical_features=config.CATEGORICAL_FEATURES,
+            numerical_features=config.NUMERICAL_FEATURES,
+            target_column=config.TARGET_COLUMN,
+            drop_columns=config.COLUMNS_TO_DROP
+        )
+        preprocessor.fit(X_train)
     
     print(f"Base model: α={base_model.alpha:.3f}, safety={base_model.safety:.3f}")
     
@@ -178,10 +205,41 @@ def create_and_save_models(key_points):
         new_model.alpha = point['alpha']
         new_model.safety = point['safety']
         
-        # Prepare model data for saving (same format as the base model)
-        model_data_to_save = {
-            'model': new_model,
-            'features': features,
+        # Create deployable model wrapper in the correct format
+        deployable_model = DeployableModel(
+            model=new_model,
+            model_type='quantile_ensemble',
+            task_type='regression',
+            preprocessor=preprocessor,
+            bin_edges=None,  # Regression model doesn't need bin edges
+            metadata={
+                'alpha': point['alpha'],
+                'safety': point['safety'],
+                'waste_pct': point['total_over_pct'],
+                'underallocation_pct': point['under_pct'],
+                'business_score': point['business_score'],
+                'description': f'{model_name.replace("_", " ").title()} configuration from Pareto frontier analysis',
+                'pareto_configuration': True,
+                'training_timestamp': str(pd.Timestamp.now())
+            }
+        )
+        
+        # Save the deployable model
+        model_path = models_subfolder / f"qe_{model_name}.pkl"
+        deployable_model.save(model_path)
+        print(f"  Saved to: {model_path}")
+        
+        # Test loading to verify it works
+        try:
+            test_model = DeployableModel.load(model_path)
+            info = test_model.get_model_info()
+            print(f"  ✓ Verified: {info['model_type']}, {info['task_type']}")
+        except Exception as e:
+            print(f"  ✗ Error loading: {e}")
+            continue
+        
+        saved_models[model_name] = {
+            'path': model_path,
             'config': {
                 'alpha': point['alpha'],
                 'safety': point['safety'],
@@ -190,16 +248,6 @@ def create_and_save_models(key_points):
                 'business_score': point['business_score'],
                 'description': f'{model_name.replace("_", " ").title()} configuration from Pareto frontier analysis'
             }
-        }
-        
-        # Save the model
-        model_path = models_subfolder / f"qe_{model_name}.pkl"
-        joblib.dump(model_data_to_save, model_path)
-        print(f"  Saved to: {model_path}")
-        
-        saved_models[model_name] = {
-            'path': model_path,
-            'config': model_data_to_save['config']
         }
     
     # Create a summary file
@@ -221,11 +269,10 @@ def create_and_save_models(key_points):
             f.write(f"  Description: {config['description']}\n\n")
         
         f.write("Usage:\n")
-        f.write("  import joblib\n")
-        f.write("  model_data = joblib.load('path/to/model.pkl')\n")
-        f.write("  model = model_data['model']\n")
-        f.write("  features = model_data['features']\n")
-        f.write("  config = model_data['config']\n")
+        f.write("  from resource_prediction.models import load_model\n")
+        f.write("  model = load_model('path/to/model.pkl')\n")
+        f.write("  predictions = model.predict(raw_dataframe)\n")
+        f.write("  info = model.get_model_info()\n")
     
     print(f"\nModel summary saved to: {summary_path}")
     print(f"\nAll models saved in: {models_subfolder}")

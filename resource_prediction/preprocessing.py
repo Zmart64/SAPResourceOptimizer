@@ -113,12 +113,12 @@ class ModelPreprocessor(BaseEstimator, TransformerMixin):
                 dummies = pd.get_dummies(
                     X_processed[cat_feature], 
                     prefix=cat_feature, 
-                    dtype=int
+                    dtype=np.int32  # Use numeric dtype instead of int
                 )
                 
                 # Add dummy columns to X_processed
                 for dummy_col in dummies.columns:
-                    X_processed[dummy_col] = dummies[dummy_col]
+                    X_processed[dummy_col] = dummies[dummy_col].astype(np.float64)
         
         return X_processed
     
@@ -135,7 +135,7 @@ class ModelPreprocessor(BaseEstimator, TransformerMixin):
                     for cat in self.categorical_features
                 )
                 if is_categorical_dummy:
-                    X_aligned[feature] = 0
+                    X_aligned[feature] = 0.0  # Use float instead of int
         
         # Select only the expected features in the correct order
         available_features = [f for f in self.encoded_feature_names_ if f in X_aligned.columns]
@@ -148,12 +148,19 @@ class ModelPreprocessor(BaseEstimator, TransformerMixin):
         # Reorder and select features
         X_final = X_aligned[self.encoded_feature_names_].copy()
         
-        # Convert categorical columns to numeric and handle missing values
+        # Convert all columns to numeric and handle missing values
         for col in X_final.columns:
-            if X_final[col].dtype.name == 'category':
-                X_final[col] = X_final[col].astype(float)
+            if X_final[col].dtype.name in ['category', 'object']:
+                # Convert to numeric, coercing errors to NaN
+                X_final[col] = pd.to_numeric(X_final[col], errors='coerce')
+            elif X_final[col].dtype.name == 'bool':
+                X_final[col] = X_final[col].astype(int)
         
+        # Fill any NaN values with 0
         X_final = X_final.fillna(0)
+        
+        # Ensure all columns are float64
+        X_final = X_final.astype(np.float64)
         
         return X_final
     
