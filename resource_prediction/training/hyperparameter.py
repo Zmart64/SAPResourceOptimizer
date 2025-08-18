@@ -7,10 +7,6 @@ import optuna
 from sklearn.model_selection import TimeSeriesSplit
 
 from resource_prediction.config import Config
-from resource_prediction.models import (
-    QuantileEnsemblePredictor, XGBoostRegressor, XGBoostClassifier,
-    LightGBMRegressor, LightGBMClassifier, RandomForestClassifier, LogisticRegression
-)
 
 
 class OptunaOptimizer:
@@ -85,39 +81,25 @@ class OptunaOptimizer:
         params = self.config.get_search_space(trial, family_name)
         use_quant_feats = params.pop("use_quant_feats")
         X_trial = self._get_feature_set(use_quant_feats)
-        model = None
-
-        # Create model based on family name - each family gets exactly the parameters it needs
-        if family_name == 'qe_regression':
-            model = QuantileEnsemblePredictor(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_regression(model, X_trial, self.y_train_gb)
-            
-        elif family_name == 'xgboost_regression':
-            model = XGBoostRegressor(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_regression(model, X_trial, self.y_train_gb)
-            
-        elif family_name == 'lightgbm_regression':
-            model = LightGBMRegressor(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_regression(model, X_trial, self.y_train_gb)
-            
-        elif family_name == 'xgboost_classification':
-            model = XGBoostClassifier(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_classification(model, X_trial, self.y_train_gb)
-            
-        elif family_name == 'lightgbm_classification':
-            model = LightGBMClassifier(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_classification(model, X_trial, self.y_train_gb)
-            
-        elif family_name == 'rf_classification':
-            model = RandomForestClassifier(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_classification(model, X_trial, self.y_train_gb)
-            
-        elif family_name == 'lr_classification':
-            model = LogisticRegression(**params, random_state=self.config.RANDOM_STATE)
-            return self._evaluate_classification(model, X_trial, self.y_train_gb)
-            
-        else:
+        
+        # Get model metadata and create model dynamically - no hardcoded model creation!
+        if family_name not in self.config.MODEL_FAMILIES:
             raise ValueError(f"Unknown model family: {family_name}")
+            
+        metadata = self.config.MODEL_FAMILIES[family_name]
+        model_class = metadata['class']
+        task_type = metadata['type']
+        
+        # Create model instance dynamically using class reference
+        model = model_class(**params, random_state=self.config.RANDOM_STATE)
+        
+        # Evaluate based on task type
+        if task_type == 'regression':
+            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+        elif task_type == 'classification':
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+        else:
+            raise ValueError(f"Unknown task type '{task_type}' for model family '{family_name}'")
 
     def run(self):
         """
