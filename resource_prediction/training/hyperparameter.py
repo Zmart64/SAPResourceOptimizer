@@ -80,39 +80,44 @@ class OptunaOptimizer:
         metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics)
 
-    def _objective(self, trial, base_model, model_type):
+    def _objective(self, trial, family_name):
         """The core objective function for Optuna to minimize."""
-        params = self.config.get_search_space(trial, base_model, model_type)
+        params = self.config.get_search_space(trial, family_name)
         use_quant_feats = params.pop("use_quant_feats")
         X_trial = self._get_feature_set(use_quant_feats)
         model = None
 
-        if model_type == "regression":
-            if base_model == 'quantile_ensemble':
-                # QuantileEnsemble accepts parameters directly - same as trainer
-                model = QuantileEnsemblePredictor(**params, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'xgboost':
-                model = XGBoostRegressor(**params, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'lightgbm':
-                model = LightGBMRegressor(**params, random_state=self.config.RANDOM_STATE)
-
-            if model is None:
-                raise ValueError(f"Unknown regression model: {base_model}")
+        # Create model based on family name - each family gets exactly the parameters it needs
+        if family_name == 'qe_regression':
+            model = QuantileEnsemblePredictor(**params, random_state=self.config.RANDOM_STATE)
             return self._evaluate_regression(model, X_trial, self.y_train_gb)
-
-        else:  # Classification
-            if base_model == 'xgboost':
-                model = XGBoostClassifier(**params, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'lightgbm':
-                model = LightGBMClassifier(**params, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'random_forest':
-                model = RandomForestClassifier(**params, random_state=self.config.RANDOM_STATE)
-            elif base_model == 'logistic_regression':
-                model = LogisticRegression(**params, random_state=self.config.RANDOM_STATE)
-
-            if model is None:
-                raise ValueError(f"Unknown classification model: {base_model}")
+            
+        elif family_name == 'xgboost_regression':
+            model = XGBoostRegressor(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'lightgbm_regression':
+            model = LightGBMRegressor(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'xgboost_classification':
+            model = XGBoostClassifier(**params, random_state=self.config.RANDOM_STATE)
             return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'lightgbm_classification':
+            model = LightGBMClassifier(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'rf_classification':
+            model = RandomForestClassifier(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        elif family_name == 'lr_classification':
+            model = LogisticRegression(**params, random_state=self.config.RANDOM_STATE)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            
+        else:
+            raise ValueError(f"Unknown model family: {family_name}")
 
     def run(self):
         """
@@ -173,8 +178,7 @@ class OptunaOptimizer:
                 print(
                     f"Optimising {family_name.upper()} – running {remaining_trials} more trials...")
                 study.optimize(
-                    lambda trial: self._objective(
-                        trial, metadata['base_model'], metadata['type']),
+                    lambda trial: self._objective(trial, family_name),
                     n_trials=remaining_trials,
                     n_jobs=self.config.NUM_PARALLEL_WORKERS,
                     show_progress_bar=True

@@ -12,10 +12,7 @@ import joblib
 
 from resource_prediction.config import Config
 from resource_prediction.training.hyperparameter import OptunaOptimizer
-from resource_prediction.models import (
-    DeployableModel, QuantileEnsemblePredictor, XGBoostRegressor, XGBoostClassifier,
-    LightGBMRegressor, LightGBMClassifier, RandomForestClassifier, LogisticRegression
-)
+from resource_prediction.models import DeployableModel
 from resource_prediction.preprocessing import ModelPreprocessor
 from resource_prediction.reporting import plot_allocation_comparison, generate_summary_report, calculate_allocation_categories
 
@@ -219,18 +216,30 @@ class Trainer:
         for _, row in all_results_df.iterrows():
             family_name = row['model']
             cv_score = row['score_cv']
-            param_cols = [c for c in all_results_df.columns if c not in [
-                'model', 'score_cv'] and not c.endswith('_hold')]
-            params = row[param_cols].to_dict()
-            for key, value in params.items():
-                if pd.isna(value):
-                    continue
-                if isinstance(value, float) and value.is_integer():
-                    params[key] = int(value)
-                if str(value).lower() in ['true', 'false']:
-                    params[key] = str(value).lower() == 'true'
-            mock_studies.append(
-                MockStudy(family_name, MockTrial(params, cv_score)))
+            
+            # Use clean configuration system: only get parameters this model family needs
+            try:
+                # Start with default parameters for this family
+                clean_params = self.config.get_defaults(family_name)
+                
+                # Override defaults with values from CSV where available
+                family_config = self.config.HYPERPARAMETER_CONFIGS.get(family_name, {})
+                for param_name in family_config.keys():
+                    if param_name in row and not pd.isna(row[param_name]):
+                        value = row[param_name]
+                        # Type conversion
+                        if isinstance(value, float) and value.is_integer():
+                            value = int(value)
+                        elif str(value).lower() in ['true', 'false']:
+                            value = str(value).lower() == 'true'
+                        clean_params[param_name] = value
+                
+                mock_studies.append(
+                    MockStudy(family_name, MockTrial(clean_params, cv_score)))
+                    
+            except Exception as e:
+                print(f"Warning: Could not load parameters for {family_name}: {e}")
+                continue
 
         self._evaluate_and_report(
             mock_studies, force_evaluate_all=self.evaluate_all_archs)
@@ -282,24 +291,9 @@ class Trainer:
         X_train_fs, X_test_fs = X_train[base_features], X_test[base_features]
         y_train_gb, y_test_gb = y_train[config.TARGET_COLUMN_PROCESSED], y_test[config.TARGET_COLUMN_PROCESSED]
 
-        # Create the appropriate model using our clean wrappers
-        if family_name == 'qe_regression':
-            # QuantileEnsemble now accepts parameters directly - much cleaner!
-            model = QuantileEnsemblePredictor(**best_params, random_state=config.RANDOM_STATE)
-        elif family_name == 'xgboost_regression':
-            model = XGBoostRegressor(**best_params, random_state=config.RANDOM_STATE)
-        elif family_name == 'xgboost_classification':
-            model = XGBoostClassifier(**best_params, random_state=config.RANDOM_STATE)
-        elif family_name == 'lightgbm_regression':
-            model = LightGBMRegressor(**best_params, random_state=config.RANDOM_STATE)
-        elif family_name == 'lightgbm_classification':
-            model = LightGBMClassifier(**best_params, random_state=config.RANDOM_STATE)
-        elif family_name == 'rf_classification':
-            model = RandomForestClassifier(**best_params, random_state=config.RANDOM_STATE)
-        elif family_name == 'lr_classification':
-            model = LogisticRegression(**best_params, random_state=config.RANDOM_STATE)
-        else:
-            raise ValueError(f"Unknown model family: {family_name}")
+        # Create the model dynamically using the same system as hyperparameter search
+        model_class = metadata['class']
+        model = model_class(**best_params, random_state=config.RANDOM_STATE)
 
         # Fit and predict using the clean BasePredictor interface
         model.fit(X_train_fs, y_train_gb)

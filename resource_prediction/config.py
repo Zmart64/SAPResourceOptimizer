@@ -3,6 +3,12 @@
 from pathlib import Path
 import optuna
 
+# Import model classes for dynamic instantiation
+from resource_prediction.models import (
+    QuantileEnsemblePredictor, XGBoostRegressor, XGBoostClassifier,
+    LightGBMRegressor, LightGBMClassifier, RandomForestClassifier, LogisticRegression
+)
+
 
 class Config:
     """
@@ -54,29 +60,21 @@ class Config:
     NUM_PARALLEL_WORKERS = 1
 
     MODEL_FAMILIES = {
-        "qe_regression":     {"type": "regression", "base_model": "quantile_ensemble"},
-        "xgboost_classification": {"type": "classification", "base_model": "xgboost"},
-        "xgboost_regression":    {"type": "regression", "base_model": "xgboost"},
-        "lightgbm_classification": {"type": "classification", "base_model": "lightgbm"},
-        "rf_classification":     {"type": "classification", "base_model": "random_forest"},
-        "lightgbm_regression":    {"type": "regression", "base_model": "lightgbm"},
-        "lr_classification":   {"type": "classification", "base_model": "logistic_regression"},
+        "qe_regression":     {"type": "regression", "base_model": "quantile_ensemble", "class": QuantileEnsemblePredictor},
+        "xgboost_classification": {"type": "classification", "base_model": "xgboost", "class": XGBoostClassifier},
+        "xgboost_regression":    {"type": "regression", "base_model": "xgboost", "class": XGBoostRegressor},
+        "lightgbm_classification": {"type": "classification", "base_model": "lightgbm", "class": LightGBMClassifier},
+        "rf_classification":     {"type": "classification", "base_model": "random_forest", "class": RandomForestClassifier},
+        "lightgbm_regression":    {"type": "regression", "base_model": "lightgbm", "class": LightGBMRegressor},
+        "lr_classification":   {"type": "classification", "base_model": "logistic_regression", "class": LogisticRegression},
     }
 
     # Hyperparameter configuration system
-    # Each parameter can have either:
-    # - "default": single value for default training
-    # - "min", "max", "type": range for hyperparameter search
-    # - "choices": list of categorical choices
+    # Each model family defines ONLY the parameters it actually needs
+    # No shared parameters, no cross-contamination between models
     HYPERPARAMETER_CONFIGS = {
-        # Classification-specific common parameters  
-        "classification_common": {
-            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 5},
-            "strategy": {"choices": ["uniform", "quantile", "kmeans"], "default": "quantile"},
-        },
-        
-        # Model-specific parameters
-        "quantile_ensemble": {
+        # Quantile Ensemble Regression - only QE-specific parameters
+        "qe_regression": {
             "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
@@ -88,51 +86,60 @@ class Config:
             "xgb_lr": {"min": 0.01, "max": 0.15, "type": "float", "log": True, "default": 0.05},
         },
         
-        "xgboost": {
-            # Regression parameters
-            "regression": {
-                "use_quant_feats": {"choices": [True, False], "default": True},
-                "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
-                "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
-                "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-                "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            },
-            # Classification parameters  
-            "classification": {
-                "use_quant_feats": {"choices": [True, False], "default": True},
-                "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
-                "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-                "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            }
-        },
-        
-        "lightgbm": {
-            # Regression parameters
-            "regression": {
-                "use_quant_feats": {"choices": [True, False], "default": True},
-                "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
-                "n_estimators": {"min": 100, "max": 700, "type": "int", "default": 400},
-                "num_leaves": {"min": 20, "max": 60, "type": "int", "default": 31},
-                "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            },
-            # Classification parameters
-            "classification": {
-                "use_quant_feats": {"choices": [True, False], "default": True},
-                "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
-                "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-                "num_leaves": {"min": 20, "max": 64, "type": "int", "default": 31},
-                "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            }
-        },
-        
-        "random_forest": {
+        # XGBoost Regression - only XGBoost regression parameters
+        "xgboost_regression": {
             "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
+            "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+        },
+        
+        # XGBoost Classification - only XGBoost classification parameters
+        "xgboost_classification": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
+            "strategy": {"choices": ["uniform", "quantile", "kmeans"], "default": "uniform"},
+            "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
+            "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+        },
+        
+        # LightGBM Regression - only LightGBM regression parameters
+        "lightgbm_regression": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "n_estimators": {"min": 100, "max": 700, "type": "int", "default": 400},
+            "num_leaves": {"min": 20, "max": 60, "type": "int", "default": 31},
+            "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            # max_depth is optional for LightGBM, not included by default
+        },
+        
+        # LightGBM Classification - only LightGBM classification parameters  
+        "lightgbm_classification": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
+            "strategy": {"choices": ["uniform", "quantile", "kmeans"], "default": "uniform"},
+            "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
+            "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "num_leaves": {"min": 20, "max": 64, "type": "int", "default": 31},
+            "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+        },
+        
+        # Random Forest Classification - only RF parameters (no alpha, no learning_rate)
+        "rf_classification": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
+            "strategy": {"choices": ["uniform", "quantile", "kmeans"], "default": "uniform"},
             "n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
             "max_depth": {"min": 6, "max": 15, "type": "int", "default": 10},
         },
         
-        "logistic_regression": {
+        # Logistic Regression Classification - only LR parameters  
+        "lr_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
+            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
+            "strategy": {"choices": ["uniform", "quantile", "kmeans"], "default": "uniform"},
             "C": {"min": 1e-2, "max": 10.0, "type": "float", "log": True, "default": 1.0},
             "solver": {"choices": ["liblinear", "saga"], "default": "liblinear"},
             "penalty": {"choices": ["l1", "l2", "elasticnet"], "default": "l2"},
@@ -203,53 +210,39 @@ class Config:
             raise ValueError(f"Invalid parameter configuration for {param_name}: {param_config}")
 
     @staticmethod
-    def get_search_space(trial, base_model, task_type):
+    def get_search_space(trial, family_name):
         """
-        Defines the hyperparameter search space for a given model and task using the new configuration system.
+        Defines the hyperparameter search space for a given model family.
 
         Args:
             trial (optuna.trial.Trial): The Optuna trial object.
-            base_model (str): The base algorithm name (e.g., 'xgboost').
-            task_type (str): The task type ('regression' or 'classification').
+            family_name (str): The model family name (e.g., 'xgboost_regression', 'lightgbm_classification').
 
         Returns:
             dict: A dictionary of suggested hyperparameters for the trial.
         """
         params = {}
         
-        # Add task-specific common parameters (currently only for classification)
-        task_common_key = f"{task_type}_common"
-        for param, config in Config.HYPERPARAMETER_CONFIGS.get(task_common_key, {}).items():
+        # Get parameters for the specific model family
+        family_config = Config.HYPERPARAMETER_CONFIGS.get(family_name, {})
+        if not family_config:
+            raise ValueError(f"No hyperparameter configuration found for model family '{family_name}'")
+            
+        for param, config in family_config.items():
             params[param] = Config._suggest_param(trial, param, config)
             
-        # Add model-specific parameters
-        model_config = Config.HYPERPARAMETER_CONFIGS.get(base_model, {})
-        if task_type in model_config:
-            # Model has task-specific config
-            model_params = model_config[task_type]
-        else:
-            # Model uses same config for all tasks
-            model_params = model_config
-            
-        for param, config in model_params.items():
-            params[param] = Config._suggest_param(trial, param, config)
-            
-        # Add special handling for model-specific logic
-        if base_model == 'quantile_ensemble' and task_type == 'regression':
-            # For quantile ensemble, alpha is already included in the model config
-            pass
-                
-        elif base_model == 'xgboost' and task_type == 'regression':
-            # For XGBoost regression, set specific objective and quantile_alpha
+        # Add model-specific transformations for internal parameter names
+        if family_name == 'xgboost_regression':
+            # For XGBoost regression, set specific objective and transform alpha to quantile_alpha
             params['objective'] = 'reg:quantileerror'
             if 'alpha' in params:
                 params['quantile_alpha'] = params.pop('alpha')
                 
-        elif base_model == 'lightgbm' and task_type == 'regression':
+        elif family_name == 'lightgbm_regression':
             # For LightGBM regression, set objective to quantile
             params['objective'] = 'quantile'
             
-        elif base_model == 'logistic_regression':
+        elif family_name == 'lr_classification':
             # Handle special constraint for logistic regression
             if params.get('solver') == 'liblinear' and params.get('penalty') == 'elasticnet':
                 raise optuna.exceptions.TrialPruned()
@@ -258,5 +251,45 @@ class Config:
                 params.pop('l1_ratio')
             elif params.get('penalty') == 'elasticnet' and params.get('solver') != 'saga':
                 raise optuna.exceptions.TrialPruned()
+                
+        return params
+
+    @staticmethod
+    def get_defaults(family_name):
+        """
+        Get default hyperparameters for a given model family.
+
+        Args:
+            family_name (str): The model family name (e.g., 'xgboost_regression').
+
+        Returns:
+            dict: A dictionary of default hyperparameters.
+        """
+        params = {}
+        
+        # Get parameters for the specific model family
+        family_config = Config.HYPERPARAMETER_CONFIGS.get(family_name, {})
+        if not family_config:
+            raise ValueError(f"No hyperparameter configuration found for model family '{family_name}'")
+            
+        for param, config in family_config.items():
+            if 'default' in config:
+                params[param] = config['default']
+            else:
+                raise ValueError(f"No default value specified for parameter '{param}' in family '{family_name}'")
+                
+        # Apply the same transformations as in get_search_space
+        if family_name == 'xgboost_regression':
+            params['objective'] = 'reg:quantileerror'
+            if 'alpha' in params:
+                params['quantile_alpha'] = params.pop('alpha')
+                
+        elif family_name == 'lightgbm_regression':
+            params['objective'] = 'quantile'
+            
+        elif family_name == 'lr_classification':
+            # Apply logistic regression constraints for defaults
+            if params.get('penalty') != 'elasticnet' and 'l1_ratio' in params:
+                params.pop('l1_ratio')
                 
         return params

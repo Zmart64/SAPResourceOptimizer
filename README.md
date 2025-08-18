@@ -197,33 +197,6 @@ python main.py --run-search --model-families lightgbm_regression
 - Use `--use-defaults` to skip search and use default parameters
 - Example: `python main.py --run-search --model-families xgboost_regression`
 
-## Recent Improvements ✨
-
-**Unified Model Architecture (2025-08)**: The codebase has been refactored to use consistent wrapper models throughout:
-
-- ✅ **Eliminated Parameter Filtering** - No more complex parameter dictionaries and filtering logic
-- ✅ **Consistent Model Usage** - Hyperparameter search and evaluation use identical model classes
-- ✅ **Simplified Extension** - Adding new models requires no parameter mapping code
-- ✅ **Cleaner Configuration** - Parameter names are consistent (e.g., `learning_rate` vs `lr`)
-
-**Before** (complex parameter filtering):
-```python
-# Old approach required manual parameter filtering
-xgb_params = {k: v for k, v in best_params.items() 
-              if k in ['alpha', 'n_estimators', 'max_depth', 'learning_rate'] and pd.notna(v)}
-if 'lr' in best_params and 'learning_rate' not in xgb_params:
-    xgb_params['learning_rate'] = best_params['lr']
-model = XGBoostClassifier(**xgb_params, random_state=config.RANDOM_STATE)
-```
-
-**After** (clean direct usage):
-```python
-# New approach: models accept parameters directly
-model = XGBoostClassifier(**best_params, random_state=config.RANDOM_STATE)
-```
-
-This architectural improvement makes the codebase much more maintainable and easier to extend.
-
 ## Supported Models
 
 **Regression Models** (predict exact memory values):
@@ -321,7 +294,11 @@ The architecture makes it simple to add new models. Both hyperparameter search a
 3. **Configure Model Family** in `resource_prediction/config.py`
    ```python
    MODEL_FAMILIES = {
-       "my_new_model_regression": {"type": "regression", "base_model": "my_new_model"},
+       "my_new_model_regression": {
+           "type": "regression", 
+           "base_model": "my_new_model",
+           "class": MyNewModel  # Reference for dynamic instantiation
+       },
        # ... other models
    }
    ```
@@ -329,7 +306,7 @@ The architecture makes it simple to add new models. Both hyperparameter search a
 4. **Define Hyperparameter Space** in `config.py`
    ```python
    HYPERPARAMETER_CONFIGS = {
-       "my_new_model": {
+       "my_new_model_regression": {  # Use the full family name
            "use_quant_feats": {"choices": [True, False], "default": True},  # If needed
            "param1": {"min": 50, "max": 200, "type": "int", "default": 100},
            "param2": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
@@ -338,31 +315,34 @@ The architecture makes it simple to add new models. Both hyperparameter search a
    }
    ```
 
-5. **Add to Hyperparameter Search** in `resource_prediction/training/hyperparameter.py`
+5. **Add Model Class Reference** in `config.py`
    ```python
-   from resource_prediction.models import MyNewModel
-   
-   # In the _objective method:
-   elif base_model == 'my_new_model':
-       model = MyNewModel(**params, random_state=self.config.RANDOM_STATE)
+   MODEL_FAMILIES = {
+       "my_new_model_regression": {
+           "type": "regression", 
+           "base_model": "my_new_model",
+           "class": MyNewModel  # Add class reference for dynamic instantiation
+       },
+       # ... other models
+   }
    ```
 
-6. **Add to Trainer** in `resource_prediction/training/trainer.py`
+6. **Add to Hyperparameter Search** in `resource_prediction/training/hyperparameter.py`
    ```python
-   from resource_prediction.models import MyNewModel
-   
-   # In the _evaluate_single_champion method:
+   # In the _objective method, add your family name:
    elif family_name == 'my_new_model_regression':
-       model = MyNewModel(**best_params, random_state=config.RANDOM_STATE)
+       model = MyNewModel(**params, random_state=self.config.RANDOM_STATE)
+       return self._evaluate_regression(model, X_trial, self.y_train_gb)
    ```
 
-**That's it!** No parameter filtering or mapping needed - the wrapper model handles all parameters directly.
+**That's it!** The system now uses dynamic model instantiation - no hardcoded model creation needed in evaluation!
 
 **Key Benefits of This Architecture:**
 - ✅ **No Parameter Filtering** - Models accept parameters directly from hyperparameter search
-- ✅ **Consistent Interface** - Same model class used in search and evaluation
+- ✅ **Consistent Interface** - Same model class used in search and evaluation  
 - ✅ **Clean Implementation** - Models handle their own parameter validation
-- ✅ **Easy Extension** - Add new models without touching parameter mapping logic
+- ✅ **Dynamic Instantiation** - Evaluation uses `metadata['class']` for automatic model creation
+- ✅ **No Hardcoded Logic** - Adding models doesn't require updating evaluation code
 
 **Model-Specific Parameters**: Only include parameters that your specific model actually uses:
 - Classification models automatically get `n_bins`, `strategy` from the `classification_common` config
