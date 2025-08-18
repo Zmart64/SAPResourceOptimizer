@@ -1,20 +1,18 @@
 """Project configuration and hyperparameter search spaces."""
 
 from pathlib import Path
+import importlib
 
 import optuna
 
-# Import model classes for dynamic instantiation
-from resource_prediction.models import (
-    LightGBMClassifier,
-    LightGBMRegressor,
-    LogisticRegression,
-    QuantileEnsemblePredictor,
-    RandomForestClassifier,
-    SizeyPredictor,
-    XGBoostClassifier,
-    XGBoostRegressor,
-)
+
+def _import_model_class(module_path: str, class_name: str):
+    """Dynamically import a model class to avoid manual imports."""
+    try:
+        module = importlib.import_module(module_path)
+        return getattr(module, class_name)
+    except (ImportError, AttributeError) as e:
+        raise ImportError(f"Could not import {class_name} from {module_path}: {e}")
 
 
 class Config:
@@ -89,42 +87,42 @@ class Config:
         "qe_regression": {
             "type": "regression",
             "base_model": "quantile_ensemble",
-            "class": QuantileEnsemblePredictor,
+            "class": _import_model_class("resource_prediction.models", "QuantileEnsemblePredictor"),
         },
         "xgboost_classification": {
             "type": "classification",
             "base_model": "xgboost",
-            "class": XGBoostClassifier,
+            "class": _import_model_class("resource_prediction.models", "XGBoostClassifier"),
         },
         "xgboost_regression": {
             "type": "regression",
             "base_model": "xgboost",
-            "class": XGBoostRegressor,
+            "class": _import_model_class("resource_prediction.models", "XGBoostRegressor"),
         },
         "lightgbm_classification": {
             "type": "classification",
             "base_model": "lightgbm",
-            "class": LightGBMClassifier,
+            "class": _import_model_class("resource_prediction.models", "LightGBMClassifier"),
         },
         "rf_classification": {
             "type": "classification",
             "base_model": "random_forest",
-            "class": RandomForestClassifier,
+            "class": _import_model_class("resource_prediction.models", "RandomForestClassifier"),
         },
         "lightgbm_regression": {
             "type": "regression",
             "base_model": "lightgbm",
-            "class": LightGBMRegressor,
+            "class": _import_model_class("resource_prediction.models", "LightGBMRegressor"),
         },
         "lr_classification": {
             "type": "classification",
             "base_model": "logistic_regression",
-            "class": LogisticRegression,
+            "class": _import_model_class("resource_prediction.models", "LogisticRegression"),
         },
         "sizey_regression": {
             "type": "regression",
             "base_model": "sizey",
-            "class": SizeyPredictor,
+            "class": _import_model_class("resource_prediction.models", "SizeyPredictor"),
         },
     }
 
@@ -256,6 +254,24 @@ class Config:
                 "type": "float",
                 "default": 0.5,
             },  # Only used with elasticnet
+        },
+        # Sizey Regression - Sizey-specific parameters
+        "sizey_regression": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "sizey_alpha": {"min": 0.01, "max": 0.5, "type": "float", "default": 0.1},
+            "offset_strat": {
+                "choices": ["DYNAMIC", "STD", "MED_UNDER", "MED_ALL", "STDUNDER"],
+                "default": "DYNAMIC",
+            },
+            "error_strat": {
+                "choices": ["MAX_EVER_OBSERVED", "DOUBLE"],
+                "default": "MAX_EVER_OBSERVED",
+            },
+            "use_softmax": {"choices": [True, False], "default": True},
+            "error_metric": {
+                "choices": ["smoothed_mape", "neg_mean_squared_error"],
+                "default": "smoothed_mape",
+            },
         },
     }
 
