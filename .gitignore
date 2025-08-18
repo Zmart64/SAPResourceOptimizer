@@ -42,3 +42,4 @@ wheels/
 *.egg
 
 *rf_classification.pkl
+artifacts/*
