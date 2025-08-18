@@ -42,3 +42,6 @@ wheels/
 *.egg
 
 *rf_classification.pkl
+
+# CatBoost training artifacts
+catboost_info/
