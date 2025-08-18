@@ -18,6 +18,8 @@ import lightgbm as lgb
 
 from resource_prediction.config import Config
 from resource_prediction.training.hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
+from resource_prediction.models import DeployableModel
+from resource_prediction.preprocessing import ModelPreprocessor
 from resource_prediction.reporting import plot_allocation_comparison, generate_summary_report, calculate_allocation_categories
 
 
@@ -81,7 +83,7 @@ class Trainer:
     def _get_family_name_from_study(self, study) -> str:
         """
         Robustly extracts the base family name from a study object, handling both
-        clean names ('xgboost_regression') and legacy timestamped names
+        clean names ('xgboost_regression') and timestamped names
         ('xgboost_regression_20250812').
         """
         for family_key in self.config.MODEL_FAMILIES:
@@ -236,7 +238,7 @@ class Trainer:
                 model = lgb.LGBMRegressor(
                     **best_params, random_state=config.RANDOM_STATE, verbose=-1)
 
-            if base_model_name != 'random_forest':
+            if base_model_name not in ['random_forest']:
                 model.fit(X_train_fs, y_train_gb)
                 alloc = model.predict(X_test_fs)
         elif task_type == 'classification':
@@ -280,9 +282,32 @@ class Trainer:
 
         if save_model:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
-            joblib.dump({'model': model, 'bin_edges': bin_edges,
-                        'features': features}, config.MODELS_DIR / f"{family_name}.pkl")
-            print(f"Saved model artifact for '{family_name}'")
+            
+            # Create and fit preprocessing pipeline
+            preprocessor = ModelPreprocessor(
+                categorical_features=['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt'],
+                expected_features=features
+            )
+            preprocessor.fit(X_train_fs)
+            
+            # Create deployable model wrapper
+            deployable_model = DeployableModel(
+                model=model,
+                model_type=base_model_name,
+                task_type=task_type,
+                preprocessor=preprocessor,
+                bin_edges=bin_edges,
+                metadata={
+                    'training_features': features,
+                    'model_family': family_name,
+                    'training_timestamp': str(pd.Timestamp.now())
+                }
+            )
+            
+            # Save deployable model
+            deployable_model.save(config.MODELS_DIR / f"{family_name}.pkl")
+            
+            print(f"Saved deployable model artifact for '{family_name}'")
 
         model_alloc_stats = calculate_allocation_categories(
             name=family_name, allocations=alloc, true_values=y_test_gb.values)
