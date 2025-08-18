@@ -254,11 +254,11 @@ resource_prediction/models/
 
 ### Adding New Models
 
-The architecture makes it simple to add new models. Both hyperparameter search and final evaluation use the same wrapper classes, eliminating parameter filtering complexity.
+The system uses a simplified model registration approach that requires only 3 steps to add new models. The dynamic import and instantiation system automatically handles model creation without requiring hardcoded logic.
 
 **Step-by-Step Guide:**
 
-1. **Create Model Wrapper** in `resource_prediction/models/implementations/`
+1. **Create Model Class** in `resource_prediction/models/implementations/`
    ```python
    from ..base import BasePredictor
    import pandas as pd
@@ -280,34 +280,23 @@ The architecture makes it simple to add new models. Both hyperparameter search a
            pass
    ```
 
-2. **Register Model** in `resource_prediction/models/__init__.py`
-   ```python
-   from .implementations.my_new_model import MyNewModel
-   
-   __all__ = [
-       "BasePredictor",
-       "MyNewModel",  # Add your model here
-       # ... other models
-   ]
-   ```
-
-3. **Configure Model Family** in `resource_prediction/config.py`
+2. **Register in MODEL_FAMILIES** in `resource_prediction/config.py`
    ```python
    MODEL_FAMILIES = {
        "my_new_model_regression": {
            "type": "regression", 
            "base_model": "my_new_model",
-           "class": MyNewModel  # Reference for dynamic instantiation
+           "class": _import_model_class("resource_prediction.models", "MyNewModel"),
        },
        # ... other models
    }
    ```
 
-4. **Define Hyperparameter Space** in `config.py`
+3. **Define Hyperparameter Configuration** in `config.py`
    ```python
    HYPERPARAMETER_CONFIGS = {
-       "my_new_model_regression": {  # Use the full family name
-           "use_quant_feats": {"choices": [True, False], "default": True},  # If needed
+       "my_new_model_regression": {
+           "use_quant_feats": {"choices": [True, False], "default": True},
            "param1": {"min": 50, "max": 200, "type": "int", "default": 100},
            "param2": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
            # Only include parameters your model actually uses!
@@ -315,37 +304,22 @@ The architecture makes it simple to add new models. Both hyperparameter search a
    }
    ```
 
-5. **Add Model Class Reference** in `config.py`
-   ```python
-   MODEL_FAMILIES = {
-       "my_new_model_regression": {
-           "type": "regression", 
-           "base_model": "my_new_model",
-           "class": MyNewModel  # Add class reference for dynamic instantiation
-       },
-       # ... other models
-   }
-   ```
+**That's it!** The dynamic import and instantiation system automatically handles the rest:
 
-6. **Add to Hyperparameter Search** in `resource_prediction/training/hyperparameter.py`
-   ```python
-   # In the _objective method, add your family name:
-   elif family_name == 'my_new_model_regression':
-       model = MyNewModel(**params, random_state=self.config.RANDOM_STATE)
-       return self._evaluate_regression(model, X_trial, self.y_train_gb)
-   ```
-
-**That's it!** The system now uses dynamic model instantiation - no hardcoded model creation needed in evaluation!
+- ✅ **No manual imports needed** - Dynamic imports handle model loading automatically
+- ✅ **No hardcoded logic** - Models are instantiated dynamically from MODEL_FAMILIES
+- ✅ **Automatic registration** - Hyperparameter search discovers models automatically
+- ✅ **Clean separation** - Each model only defines its own parameters
 
 **Key Benefits of This Architecture:**
-- ✅ **No Parameter Filtering** - Models accept parameters directly from hyperparameter search
-- ✅ **Consistent Interface** - Same model class used in search and evaluation  
-- ✅ **Clean Implementation** - Models handle their own parameter validation
-- ✅ **Dynamic Instantiation** - Evaluation uses `metadata['class']` for automatic model creation
-- ✅ **No Hardcoded Logic** - Adding models doesn't require updating evaluation code
+- ✅ **Simplified workflow** - Only 3 steps required to add new models
+- ✅ **No parameter filtering** - Models accept parameters directly from hyperparameter search
+- ✅ **Consistent interface** - Same model class used in search and evaluation  
+- ✅ **Clean implementation** - Models handle their own parameter validation
+- ✅ **Dynamic instantiation** - Evaluation uses `metadata['class']` for automatic model creation
 
 **Model-Specific Parameters**: Only include parameters that your specific model actually uses:
-- Classification models automatically get `n_bins`, `strategy` from the `classification_common` config
+- Classification models automatically get `n_bins`, `strategy` from the classification config
 - Regression models only need parameters relevant to their algorithm
 - No need to handle `alpha` unless your model does quantile prediction
 - Use `**kwargs` in your `__init__` to gracefully handle unexpected parameters
