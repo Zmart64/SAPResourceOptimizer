@@ -69,16 +69,6 @@ class Config:
     # - "min", "max", "type": range for hyperparameter search
     # - "choices": list of categorical choices
     HYPERPARAMETER_CONFIGS = {
-        # Common parameters for all models
-        "common": {
-            "use_quant_feats": {"choices": [True, False]},
-        },
-        
-        # Regression-specific common parameters
-        "regression_common": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
-        },
-        
         # Classification-specific common parameters  
         "classification_common": {
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 5},
@@ -87,6 +77,8 @@ class Config:
         
         # Model-specific parameters
         "quantile_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
             "gb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
@@ -99,12 +91,15 @@ class Config:
         "xgboost": {
             # Regression parameters
             "regression": {
+                "use_quant_feats": {"choices": [True, False], "default": True},
+                "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
                 "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
                 "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
                 "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
             },
             # Classification parameters  
             "classification": {
+                "use_quant_feats": {"choices": [True, False], "default": True},
                 "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
                 "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
                 "lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
@@ -114,12 +109,15 @@ class Config:
         "lightgbm": {
             # Regression parameters
             "regression": {
+                "use_quant_feats": {"choices": [True, False], "default": True},
+                "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
                 "n_estimators": {"min": 100, "max": 700, "type": "int", "default": 400},
                 "num_leaves": {"min": 20, "max": 60, "type": "int", "default": 31},
                 "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
             },
             # Classification parameters
             "classification": {
+                "use_quant_feats": {"choices": [True, False], "default": True},
                 "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
                 "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
                 "num_leaves": {"min": 20, "max": 64, "type": "int", "default": 31},
@@ -128,11 +126,13 @@ class Config:
         },
         
         "random_forest": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
             "n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
             "max_depth": {"min": 6, "max": 15, "type": "int", "default": 10},
         },
         
         "logistic_regression": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
             "C": {"min": 1e-2, "max": 10.0, "type": "float", "log": True, "default": 1.0},
             "solver": {"choices": ["liblinear", "saga"], "default": "liblinear"},
             "penalty": {"choices": ["l1", "l2", "elasticnet"], "default": "l2"},
@@ -154,14 +154,7 @@ class Config:
         """
         params = {}
         
-        # Add common parameters
-        for param, config in Config.HYPERPARAMETER_CONFIGS.get("common", {}).items():
-            if "default" in config:
-                params[param] = config["default"]
-            elif "choices" in config:
-                params[param] = config["choices"][0]  # Use first choice as default
-                
-        # Add task-specific common parameters
+        # Add task-specific common parameters (currently only for classification)
         task_common_key = f"{task_type}_common"
         for param, config in Config.HYPERPARAMETER_CONFIGS.get(task_common_key, {}).items():
             if "default" in config:
@@ -224,11 +217,7 @@ class Config:
         """
         params = {}
         
-        # Add common parameters
-        for param, config in Config.HYPERPARAMETER_CONFIGS.get("common", {}).items():
-            params[param] = Config._suggest_param(trial, param, config)
-            
-        # Add task-specific common parameters
+        # Add task-specific common parameters (currently only for classification)
         task_common_key = f"{task_type}_common"
         for param, config in Config.HYPERPARAMETER_CONFIGS.get(task_common_key, {}).items():
             params[param] = Config._suggest_param(trial, param, config)
@@ -247,16 +236,13 @@ class Config:
             
         # Add special handling for model-specific logic
         if base_model == 'quantile_ensemble' and task_type == 'regression':
-            # For quantile ensemble, also add alpha to regression params if not already present
-            if 'alpha' not in params:
-                params['alpha'] = Config._suggest_param(trial, 'alpha', Config.HYPERPARAMETER_CONFIGS['regression_common']['alpha'])
+            # For quantile ensemble, alpha is already included in the model config
+            pass
                 
         elif base_model == 'xgboost' and task_type == 'regression':
             # For XGBoost regression, set specific objective and quantile_alpha
             params['objective'] = 'reg:quantileerror'
-            if 'alpha' not in params:
-                params['quantile_alpha'] = Config._suggest_param(trial, 'alpha', Config.HYPERPARAMETER_CONFIGS['regression_common']['alpha'])
-            else:
+            if 'alpha' in params:
                 params['quantile_alpha'] = params.pop('alpha')
                 
         elif base_model == 'lightgbm' and task_type == 'regression':

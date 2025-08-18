@@ -26,7 +26,7 @@ def main(args):
     """
     config = Config()
 
-    if not args.skip_preprocessing and (args.run_search or args.evaluate_only):
+    if not args.skip_preprocessing and (args.run_search or args.train or args.evaluate_only):
         preprocessor = DataPreprocessor(config)
         preprocessor.process()
 
@@ -36,16 +36,21 @@ def main(args):
         print("Preprocessing complete. Exiting as requested.")
         return
 
+    # Set use_defaults=True for --train option
+    use_defaults = getattr(args, 'use_defaults', False)
+    if hasattr(args, 'train') and args.train:
+        use_defaults = True
+
     trainer = Trainer(
         config,
         evaluate_all_archs=args.evaluate_all_archs,
         task_type_filter=args.task_type,
         save_models=args.save_models,
         model_families=args.model_families,
-        use_defaults=args.use_defaults
+        use_defaults=use_defaults
     )
 
-    if args.run_search:
+    if args.run_search or args.train:
         trainer.run_optimization_and_evaluation()
     elif args.evaluate_only:
         trainer.run_evaluation_from_files()
@@ -63,6 +68,11 @@ if __name__ == "__main__":
         "--run-search",
         action="store_true",
         help="Run the full hyperparameter search and final evaluation."
+    )
+    action_group.add_argument(
+        "--train",
+        action="store_true",
+        help="Train models with default parameters and evaluate them. Similar to --run-search --use-defaults but simpler."
     )
     action_group.add_argument(
         "--evaluate-only",
@@ -107,7 +117,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-defaults",
         action="store_true",
-        help="Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization."
+        help="[Only with --run-search] Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization. Use --train for a simpler alternative."
     )
 
     args = parser.parse_args()
