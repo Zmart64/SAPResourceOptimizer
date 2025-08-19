@@ -686,14 +686,103 @@ class XGBXGBQuantileEnsemble(BasePredictor):
         self.aggressive_xgb.fit(Xd, y, **xgb_fit_params)
     
     def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Predict by taking the maximum of both specialized models and applying safety factor."""
+        """
+        Predict using specialized routing based on input characteristics.
+        
+        Conservative model is better for: complex builds, high memory, many dependencies
+        Aggressive model is better for: standard builds, typical patterns
+        """
         Xd = self._encode(X, fit=False)
         
         conservative_preds = self.conservative_xgb.predict(Xd)
         aggressive_preds = self.aggressive_xgb.predict(Xd)
-        preds = np.maximum(conservative_preds, aggressive_preds)
         
-        return preds * self.safety
+        # Analyze input characteristics to determine model weights
+        routing_weights = self._calculate_routing_weights(X)
+        
+        # Use weighted average instead of max, with safety bias towards conservative
+        weighted_preds = (
+            routing_weights * conservative_preds + 
+            (1 - routing_weights) * aggressive_preds
+        )
+        
+        # Apply safety bias: if conservative model predicts significantly higher, use it
+        conservative_bias = conservative_preds > aggressive_preds * 1.2
+        final_preds = np.where(
+            conservative_bias,
+            conservative_preds,  # Use conservative when it's significantly higher
+            np.maximum(weighted_preds, aggressive_preds)  # Otherwise use weighted but at least aggressive
+        )
+        
+        return final_preds * self.safety
+    
+    def _calculate_routing_weights(self, X: pd.DataFrame) -> np.ndarray:
+        """
+        Calculate routing weights for each sample.
+        Returns values between 0 and 1 where:
+        - 1.0 = fully trust conservative model (complex/unusual builds)  
+        - 0.0 = fully trust aggressive model (standard builds)
+        """
+        weights = np.zeros(len(X))
+        
+        # Feature-based complexity indicators
+        complexity_score = 0.0
+        
+        # 1. Memory complexity (if present)
+        if 'memory_limit' in X.columns:
+            memory_values = X['memory_limit'].fillna(X['memory_limit'].median())
+            # Normalize memory values and use high memory as complexity indicator
+            memory_normalized = (memory_values - memory_values.min()) / (memory_values.max() - memory_values.min() + 1e-8)
+            complexity_score += 0.3 * memory_normalized
+            
+        # 2. Build size/scale indicators  
+        size_indicators = ['build_size', 'package_count', 'dependency_count', 'file_count']
+        for col in size_indicators:
+            if col in X.columns:
+                values = X[col].fillna(X[col].median())
+                # High values indicate complexity
+                normalized = (values - values.min()) / (values.max() - values.min() + 1e-8)
+                complexity_score += 0.1 * normalized
+                
+        # 3. Language/framework complexity
+        complex_langs = ['cpp', 'c++', 'java', 'scala', 'rust']
+        simple_langs = ['python', 'javascript', 'node']
+        
+        for col in X.columns:
+            col_lower = col.lower()
+            if any(lang in col_lower for lang in complex_langs):
+                complexity_score += 0.1 * X[col].fillna(0)
+            elif any(lang in col_lower for lang in simple_langs):
+                complexity_score -= 0.05 * X[col].fillna(0)  # Subtract for simple languages
+                
+        # 4. Unusual feature combinations (high categorical diversity)
+        categorical_cols = X.select_dtypes(include=['object', 'category']).columns
+        if len(categorical_cols) > 0:
+            # Count unique values across categorical features
+            uniqueness_score = 0
+            for col in categorical_cols:
+                if len(X[col].unique()) > len(X) * 0.5:  # High uniqueness
+                    uniqueness_score += 0.05
+            complexity_score += uniqueness_score
+            
+        # 5. Extreme values detection (outliers indicate complexity)
+        numeric_cols = X.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            values = X[col].fillna(X[col].median())
+            if len(values) > 1:
+                q75, q25 = np.percentile(values, [75, 25])
+                iqr = q75 - q25
+                if iqr > 0:
+                    outliers = ((values < (q25 - 1.5 * iqr)) | (values > (q75 + 1.5 * iqr)))
+                    complexity_score += 0.1 * outliers.astype(float)
+        
+        # Normalize and constrain to [0, 1]
+        weights = np.clip(complexity_score, 0, 1)
+        
+        # Add some randomness for exploration but bias towards conservative for safety
+        weights = weights * 0.8 + 0.2  # Minimum 20% conservative weight for safety
+        
+        return weights
     
     def get_params(self) -> Dict[str, Any]:
         """Get model parameters."""
