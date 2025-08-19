@@ -26,7 +26,7 @@ def main(args):
     """
     config = Config()
 
-    if not args.skip_preprocessing and (args.run_search or args.train or args.evaluate_only):
+    if not args.skip_preprocessing and (args.run_search or args.train_default or args.evaluate_only):
         preprocessor = DataPreprocessor(config)
         preprocessor.process()
 
@@ -36,9 +36,9 @@ def main(args):
         print("Preprocessing complete. Exiting as requested.")
         return
 
-    # Set use_defaults=True for --train option
+    # Set use_defaults=True for --train-default option
     use_defaults = getattr(args, 'use_defaults', False)
-    if hasattr(args, 'train') and args.train:
+    if args.train_default:
         use_defaults = True
 
     # Handle --run-all-qe-models flag
@@ -78,7 +78,7 @@ def main(args):
         use_defaults=use_defaults
     )
 
-    if args.run_search or args.train:
+    if args.run_search or args.train_default:
         trainer.run_optimization_and_evaluation()
     elif args.evaluate_only:
         trainer.run_evaluation_from_files()
@@ -98,7 +98,8 @@ if __name__ == "__main__":
         help="Run the full hyperparameter search and final evaluation."
     )
     action_group.add_argument(
-        "--train",
+        "--train-default",
+        dest="train_default",
         action="store_true",
         help="Train models with default parameters and evaluate them. Similar to --run-search --use-defaults but simpler."
     )
@@ -145,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-defaults",
         action="store_true",
-        help="[Only with --run-search] Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization. Use --train for a simpler alternative."
+        help="[Only with --run-search] Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization. Use --train-default for a simpler alternative."
     )
     parser.add_argument(
         "--run-all-qe-models",
