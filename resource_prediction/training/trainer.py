@@ -149,8 +149,7 @@ class Trainer:
             # Get default parameters
             base_model = metadata['base_model']
             task_type = metadata['type']
-            default_params = self.config.get_default_params(
-                base_model, task_type)
+            default_params = self.config.get_defaults(family_name)
 
             # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
             from resource_prediction.training.hyperparameter import OptunaOptimizer

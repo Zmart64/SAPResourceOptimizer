@@ -84,7 +84,7 @@ class OptunaOptimizer:
 
     def _objective(self, trial, family_name):
         """The core objective function for Optuna to minimize."""
-        params = Config.get_search_space(trial, family_name)
+        params = self.config.get_search_space(trial, family_name)
         use_quant_feats = params.pop("use_quant_feats")
         X_trial = self._get_feature_set(use_quant_feats)
 
