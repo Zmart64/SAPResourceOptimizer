@@ -147,19 +147,7 @@ class Trainer:
             print(f"Training {family_name} with default parameters...")
             
             # Get default parameters for the family
-            family_config = self.config.HYPERPARAMETER_CONFIGS.get(family_name, {})
-            default_params = {}
-            for param, config in family_config.items():
-                if "default" in config:
-                    default_params[param] = config["default"]
-                elif "choices" in config:
-                    default_params[param] = config["choices"][0]
-                elif config.get("type") == "int":
-                    # Use the default value, or midpoint if no default
-                    default_params[param] = config.get("default", (config["min"] + config["max"]) // 2)
-                elif config.get("type") == "float":
-                    # Use the default value, or midpoint if no default
-                    default_params[param] = config.get("default", (config["min"] + config["max"]) / 2)
+            default_params = self.config.get_defaults(family_name)
             
             # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
             from resource_prediction.training.hyperparameter import OptunaOptimizer
