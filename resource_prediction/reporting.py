@@ -144,11 +144,14 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
     df = pd.DataFrame(all_results)
 
     id_col = ['model_name']
+    # Include avg_pred_time and score_hold if they exist
+    timing_col = ['avg_pred_time'] if 'avg_pred_time' in df.columns else []
+    score_col = ['score_hold'] if 'score_hold' in df.columns else []
     count_cols = sorted([c for c in df.columns if c.endswith('_jobs')])
     perc_cols = sorted([c for c in df.columns if c.endswith('_perc')])
     mem_cols = sorted([c for c in df.columns if c.endswith('_gb')])
 
-    df = df[id_col + count_cols + perc_cols + mem_cols]
+    df = df[id_col + timing_col + score_col + count_cols + perc_cols + mem_cols]
 
     for col in df.columns:
         if '_perc' in col or '_gb' in col:
@@ -156,3 +159,32 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
 
     df.to_csv(output_path, index=False)
     print(f"Unified allocation summary report saved to {output_path}")
+    
+    # Print summary of results including prediction times and holdout scores if available
+    print("\nModel Performance Summary:")
+    
+    # Calculate max widths for alignment
+    max_name_width = max(len(row['model_name']) for _, row in df.iterrows())
+    
+    # Print header
+    header = f"{'Model':<{max_name_width}} | {'Holdout Score':<14} | {'Avg Pred Time (s)':<18}"
+    print(header)
+    print("-" * len(header))
+    
+    for _, row in df.iterrows():
+        model_name = row['model_name']
+        
+        # Format holdout score
+        if 'score_hold' in row and not pd.isna(row['score_hold']):
+            holdout_score = f"{float(row['score_hold']):.4f}"
+        else:
+            holdout_score = "N/A"
+        
+        # Format prediction time
+        if 'avg_pred_time' in row and not pd.isna(row['avg_pred_time']):
+            avg_time = f"{float(row['avg_pred_time']):.6f}"
+        else:
+            avg_time = "N/A"
+        
+        # Print aligned row
+        print(f"{model_name:<{max_name_width}} | {holdout_score:<14} | {avg_time:<18}")

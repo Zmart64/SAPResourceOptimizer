@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 import seaborn as sns
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
@@ -299,9 +300,13 @@ class Trainer:
         if task_type == 'classification':
             model.confidence_threshold = confidence_threshold
 
-        # Fit and predict using the clean BasePredictor interface
+        # Fit the model
         model.fit(X_train_fs, y_train_gb)
+        # Time predictions to compute average prediction time per sample
+        start_time = time.time()
         alloc = model.predict(X_test_fs)
+        end_time = time.time()
+        avg_pred_time = (end_time - start_time) / len(alloc) if len(alloc) > 0 else 0
 
         # Handle saving the model
         if save_model:
@@ -356,8 +361,14 @@ class Trainer:
         if task_type == 'classification':
             final_params['confidence_threshold'] = confidence_threshold
 
-        result_row = {'model': family_name, 'score_cv': study.best_value, **
-                      final_params, **{f"{k}_hold": v for k, v in hold_metrics.items()}}
+        # Construct result row including average prediction time
+        result_row = {
+            'model': family_name,
+            'score_cv': study.best_value,
+            'avg_pred_time': avg_pred_time,
+            **final_params,
+            **{f"{k}_hold": v for k, v in hold_metrics.items()}
+        }
 
         return task_type, result_row, model_alloc_stats
 
@@ -459,7 +470,16 @@ class Trainer:
                 plt.title("Final Model Performance on Hold-out Data")
                 plt.tight_layout()
                 plt.savefig(self.config.RESULTS_PLOT_PATH)
-                print(
-                    f"Comparison chart saved to {self.config.RESULTS_PLOT_PATH}")
+                print(f"Comparison chart saved to {self.config.RESULTS_PLOT_PATH}")
+                # Scatter plot: Hold-out score vs prediction time
+                plt.figure(figsize=(10, 8))
+                sns.scatterplot(data=all_results, x='avg_pred_time', y='score_hold', hue='model', s=100)
+                plt.xlabel('Average Prediction Time (s)', fontsize=12)
+                plt.ylabel('Hold-out Set Business Score (Lower is Better)', fontsize=12)
+                plt.title('Prediction Time vs Model Performance', fontsize=14)
+                plt.legend(title='Model', bbox_to_anchor=(1.02, 1), loc='upper left')
+                plt.tight_layout()
+                plt.savefig(self.config.SCORE_TIME_PLOT_PATH)
+                print(f"Score vs prediction time plot saved to {self.config.SCORE_TIME_PLOT_PATH}")
 
         return regr_df, class_df, all_model_stats

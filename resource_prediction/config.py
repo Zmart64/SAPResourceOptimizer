@@ -53,6 +53,8 @@ class Config:
     REGRESSION_RESULTS_CSV_PATH = OUTPUT_DIR / "regression_results.csv"
     CLASSIFICATION_RESULTS_CSV_PATH = OUTPUT_DIR / "classification_results.csv"
     RESULTS_PLOT_PATH = OUTPUT_DIR / "comparison_chart.png"
+    # Path for holdout score vs prediction time scatter plot
+    SCORE_TIME_PLOT_PATH = OUTPUT_DIR / "score_vs_prediction_time.png"
 
     TARGET_COLUMN_RAW = "max_rss"
     TARGET_COLUMN_PROCESSED = "max_rss_gb"
