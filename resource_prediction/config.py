@@ -91,8 +91,8 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 51 
-    NUM_PARALLEL_WORKERS = 32 
+    N_CALLS_PER_FAMILY = 51
+    NUM_PARALLEL_WORKERS = 32
 
     MODEL_FAMILIES = {
         "qe_regression": {
@@ -154,7 +154,6 @@ class Config:
             "type": "classification",
             "base_model": "xgboost",
             "class": XGBoostClassifier,
-            "confidence_threshold_tuning": True,
         },
         "xgboost_regression": {
             "type": "regression",
@@ -165,13 +164,11 @@ class Config:
             "type": "classification",
             "base_model": "lightgbm",
             "class": LightGBMClassifier,
-            "confidence_threshold_tuning": True,
         },
         "rf_classification": {
             "type": "classification",
             "base_model": "random_forest",
             "class": RandomForestClassifier,
-            "confidence_threshold_tuning": True,
         },
         "lightgbm_regression": {
             "type": "regression",
@@ -182,7 +179,6 @@ class Config:
             "type": "classification",
             "base_model": "logistic_regression",
             "class": LogisticRegression,
-            "confidence_threshold_tuning": True,
         },
         "sizey_regression": {
             "type": "regression",
@@ -500,6 +496,7 @@ class Config:
         # XGBoost Classification - only XGBoost classification parameters
         "xgboost_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
+            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -533,6 +530,7 @@ class Config:
         # LightGBM Classification - only LightGBM classification parameters
         "lightgbm_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
+            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -552,6 +550,7 @@ class Config:
         # Random Forest Classification - only RF parameters (no alpha, no learning_rate)
         "rf_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
+            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -563,6 +562,7 @@ class Config:
         # Logistic Regression Classification - only LR parameters
         "lr_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
+            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -676,13 +676,6 @@ class Config:
             params[param] = Config._suggest_param(trial, param, config)
 
         params = Config._apply_family_specific_transformations(params, family_name)
-
-        # Add confidence threshold for classification models if enabled
-        family_info = Config.MODEL_FAMILIES.get(family_name, {})
-        if family_info.get("confidence_threshold_tuning"):
-            params["confidence_threshold"] = trial.suggest_float(
-                "confidence_threshold", 0.7, 1.0, step=0.05
-            )
 
         return params
 
