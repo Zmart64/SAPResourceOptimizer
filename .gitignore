@@ -45,3 +45,6 @@ wheels/
 
 # CatBoost training artifacts
 catboost_info/
+
+# Experiment artifacts and results
+artifacts/experiments/
