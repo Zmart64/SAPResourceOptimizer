@@ -47,4 +47,3 @@ wheels/
 catboost_info/
 
 # Experiment artifacts and results
-artifacts/experiments/
