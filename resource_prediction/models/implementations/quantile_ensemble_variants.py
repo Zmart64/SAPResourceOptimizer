@@ -429,6 +429,566 @@ class XGBCatQuantileEnsemble(BasePredictor):
         return self
 
 
+class XGBXGBConfidenceEnsemble(BasePredictor):
+    """
+    An ensemble regressor combining two specialized XGBoost quantile models using confidence-based selection.
+    
+    This model uses two XGBoost models with different configurations:
+    - Conservative model: Higher quantile, deeper trees, fewer estimators (for complex patterns)
+    - Aggressive model: Lower quantile, shallower trees, more estimators (for broad patterns)
+    
+    Uses confidence/uncertainty measures to select which model to trust for each prediction.
+    """
+    
+    def __init__(
+        self, 
+        alpha: float = 0.95, 
+        safety: float = 1.05, 
+        conservative_params: Optional[Dict[str, Any]] = None, 
+        aggressive_params: Optional[Dict[str, Any]] = None,
+        random_state: int = 42,
+        # Individual parameters for conservative model
+        conservative_quantile: Optional[float] = None,
+        conservative_n_estimators: Optional[int] = None,
+        conservative_max_depth: Optional[int] = None,
+        conservative_lr: Optional[float] = None,
+        # Individual parameters for aggressive model  
+        aggressive_quantile: Optional[float] = None,
+        aggressive_n_estimators: Optional[int] = None,
+        aggressive_max_depth: Optional[int] = None,
+        aggressive_lr: Optional[float] = None,
+        **kwargs
+    ):
+        """
+        Initialize the XGBoost + XGBoost Confidence-based Quantile Ensemble Predictor.
+        
+        Args:
+            alpha: Base quantile level (default: 0.95)
+            safety: Safety multiplier applied to final predictions (default: 1.05)
+            conservative_params: Parameters for conservative XGBoost model
+            aggressive_params: Parameters for aggressive XGBoost model
+            random_state: Random state for reproducibility
+            **kwargs: Additional parameters (ignored gracefully)
+        """
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+        
+        # Build conservative XGBoost params (higher quantile, deeper trees, fewer estimators)
+        final_conservative_params = {
+            "objective": "reg:quantileerror", 
+            "quantile_alpha": conservative_quantile if conservative_quantile is not None else min(0.99, alpha + 0.03),
+            "n_jobs": 1, 
+            "random_state": random_state
+        }
+        if conservative_params:
+            final_conservative_params.update(conservative_params)
+        
+        # Override with individual parameters if provided
+        if conservative_n_estimators is not None:
+            final_conservative_params["n_estimators"] = conservative_n_estimators
+        if conservative_max_depth is not None:
+            final_conservative_params["max_depth"] = conservative_max_depth
+        if conservative_lr is not None:
+            final_conservative_params["learning_rate"] = conservative_lr
+        if conservative_quantile is not None:
+            final_conservative_params["quantile_alpha"] = conservative_quantile
+            
+        self.conservative_xgb = xgb.XGBRegressor(**final_conservative_params)
+        
+        # Build aggressive XGBoost params (lower quantile, shallower trees, more estimators)
+        final_aggressive_params = {
+            "objective": "reg:quantileerror", 
+            "quantile_alpha": aggressive_quantile if aggressive_quantile is not None else max(0.85, alpha - 0.05),
+            "n_jobs": 1, 
+            "random_state": random_state
+        }
+        if aggressive_params:
+            final_aggressive_params.update(aggressive_params)
+        
+        # Override with individual parameters if provided
+        if aggressive_n_estimators is not None:
+            final_aggressive_params["n_estimators"] = aggressive_n_estimators
+        if aggressive_max_depth is not None:
+            final_aggressive_params["max_depth"] = aggressive_max_depth
+        if aggressive_lr is not None:
+            final_aggressive_params["learning_rate"] = aggressive_lr
+        if aggressive_quantile is not None:
+            final_aggressive_params["quantile_alpha"] = aggressive_quantile
+            
+        self.aggressive_xgb = xgb.XGBRegressor(**final_aggressive_params)
+        
+        self.columns = None
+    
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """One-hot encode categorical features and align columns."""
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+            
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is not None:
+                for col in self.columns:
+                    if col not in Xd.columns:
+                        Xd[col] = 0
+                Xd = Xd[self.columns]
+        
+        return Xd
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        """Fit both XGBoost models on the data."""
+        Xd = self._encode(X, fit=True)
+        
+        # Fit both models with quiet output
+        xgb_fit_params = {"verbose": False}
+        xgb_fit_params.update(fit_params)
+        
+        self.conservative_xgb.fit(Xd, y, **xgb_fit_params)
+        self.aggressive_xgb.fit(Xd, y, **xgb_fit_params)
+    
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict using confidence-based selection between specialized models."""
+        Xd = self._encode(X, fit=False)
+        
+        conservative_preds = self.conservative_xgb.predict(Xd)
+        aggressive_preds = self.aggressive_xgb.predict(Xd)
+        
+        # Calculate confidence scores based on prediction patterns
+        confidence_scores = self._calculate_confidence_scores(Xd, conservative_preds, aggressive_preds)
+        
+        # Select predictions based on confidence scores
+        # Higher confidence score = trust conservative model more
+        final_preds = np.where(
+            confidence_scores > 0.5,
+            conservative_preds,  # Trust conservative when confident
+            aggressive_preds     # Trust aggressive when less confident
+        )
+        
+        # Apply safety bias: ensure we don't go below aggressive predictions
+        final_preds = np.maximum(final_preds, aggressive_preds)
+        
+        return final_preds * self.safety
+    
+    def _calculate_confidence_scores(self, X: pd.DataFrame, conservative_preds: np.ndarray, aggressive_preds: np.ndarray) -> np.ndarray:
+        """
+        Calculate confidence scores for each prediction.
+        Returns values between 0 and 1 where:
+        - 1.0 = high confidence (trust conservative model)
+        - 0.0 = low confidence (trust aggressive model)
+        """
+        confidence = np.zeros(len(X))
+        
+        # 1. Prediction spread as uncertainty indicator
+        pred_spread = np.abs(conservative_preds - aggressive_preds)
+        # Normalize spread and invert (higher spread = lower confidence)
+        max_spread = np.percentile(pred_spread, 95) if len(pred_spread) > 1 else 1.0
+        spread_confidence = 1.0 - np.clip(pred_spread / (max_spread + 1e-8), 0, 1)
+        confidence += 0.4 * spread_confidence
+        
+        # 2. Prediction magnitude as complexity indicator
+        # Higher predictions often indicate more complex builds needing conservative approach
+        max_pred = np.maximum(conservative_preds, aggressive_preds)
+        magnitude_threshold = np.percentile(max_pred, 75) if len(max_pred) > 1 else max_pred.mean()
+        magnitude_confidence = (max_pred >= magnitude_threshold).astype(float)
+        confidence += 0.3 * magnitude_confidence
+        
+        # 3. Feature-based confidence (similar to routing but simplified)
+        # High memory, complex languages, etc. should use conservative model
+        if 'memory_limit' in X.columns:
+            memory_values = X['memory_limit'].fillna(X['memory_limit'].median())
+            high_memory = (memory_values > memory_values.median()).astype(float)
+            confidence += 0.2 * high_memory
+            
+        # 4. Language complexity indicators
+        complex_langs = ['cpp', 'c++', 'java', 'scala', 'rust']
+        for col in X.columns:
+            col_lower = col.lower()
+            if any(lang in col_lower for lang in complex_langs):
+                confidence += 0.1 * X[col].fillna(0)
+        
+        return np.clip(confidence, 0, 1)
+    
+    def get_params(self) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            conservative_params = self.conservative_xgb.get_params() if hasattr(self.conservative_xgb, 'get_params') else {}
+        except Exception:
+            conservative_params = {}
+            
+        try:
+            aggressive_params = self.aggressive_xgb.get_params() if hasattr(self.aggressive_xgb, 'get_params') else {}
+        except Exception:
+            aggressive_params = {}
+            
+        return {
+            "alpha": self.alpha,
+            "safety": self.safety,
+            "random_state": self.random_state,
+            "conservative_params": conservative_params,
+            "aggressive_params": aggressive_params
+        }
+    
+    def set_params(self, **params) -> 'XGBXGBConfidenceEnsemble':
+        """Set model parameters."""
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
+
+
+class XGBXGBAdaptiveSafetyEnsemble(BasePredictor):
+    """
+    An ensemble regressor combining two specialized XGBoost quantile models using adaptive safety factors.
+    
+    This model uses two XGBoost models with different configurations:
+    - Conservative model: Higher quantile, deeper trees, fewer estimators (for complex patterns)
+    - Aggressive model: Lower quantile, shallower trees, more estimators (for broad patterns)
+    
+    Uses the aggressive model as base but adapts safety factor based on model agreement.
+    """
+    
+    def __init__(
+        self, 
+        alpha: float = 0.95, 
+        safety: float = 1.05, 
+        conservative_params: Optional[Dict[str, Any]] = None, 
+        aggressive_params: Optional[Dict[str, Any]] = None,
+        random_state: int = 42,
+        # Individual parameters for conservative model
+        conservative_quantile: Optional[float] = None,
+        conservative_n_estimators: Optional[int] = None,
+        conservative_max_depth: Optional[int] = None,
+        conservative_lr: Optional[float] = None,
+        # Individual parameters for aggressive model  
+        aggressive_quantile: Optional[float] = None,
+        aggressive_n_estimators: Optional[int] = None,
+        aggressive_max_depth: Optional[int] = None,
+        aggressive_lr: Optional[float] = None,
+        **kwargs
+    ):
+        """
+        Initialize the XGBoost + XGBoost Adaptive Safety Quantile Ensemble Predictor.
+        
+        Args:
+            alpha: Base quantile level (default: 0.95)
+            safety: Base safety multiplier (default: 1.05)
+            conservative_params: Parameters for conservative XGBoost model
+            aggressive_params: Parameters for aggressive XGBoost model
+            random_state: Random state for reproducibility
+            **kwargs: Additional parameters (ignored gracefully)
+        """
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+        
+        # Build conservative XGBoost params (higher quantile, deeper trees, fewer estimators)
+        final_conservative_params = {
+            "objective": "reg:quantileerror", 
+            "quantile_alpha": conservative_quantile if conservative_quantile is not None else min(0.99, alpha + 0.03),
+            "n_jobs": 1, 
+            "random_state": random_state
+        }
+        if conservative_params:
+            final_conservative_params.update(conservative_params)
+        
+        # Override with individual parameters if provided
+        if conservative_n_estimators is not None:
+            final_conservative_params["n_estimators"] = conservative_n_estimators
+        if conservative_max_depth is not None:
+            final_conservative_params["max_depth"] = conservative_max_depth
+        if conservative_lr is not None:
+            final_conservative_params["learning_rate"] = conservative_lr
+        if conservative_quantile is not None:
+            final_conservative_params["quantile_alpha"] = conservative_quantile
+            
+        self.conservative_xgb = xgb.XGBRegressor(**final_conservative_params)
+        
+        # Build aggressive XGBoost params (lower quantile, shallower trees, more estimators)
+        final_aggressive_params = {
+            "objective": "reg:quantileerror", 
+            "quantile_alpha": aggressive_quantile if aggressive_quantile is not None else max(0.85, alpha - 0.05),
+            "n_jobs": 1, 
+            "random_state": random_state
+        }
+        if aggressive_params:
+            final_aggressive_params.update(aggressive_params)
+        
+        # Override with individual parameters if provided
+        if aggressive_n_estimators is not None:
+            final_aggressive_params["n_estimators"] = aggressive_n_estimators
+        if aggressive_max_depth is not None:
+            final_aggressive_params["max_depth"] = aggressive_max_depth
+        if aggressive_lr is not None:
+            final_aggressive_params["learning_rate"] = aggressive_lr
+        if aggressive_quantile is not None:
+            final_aggressive_params["quantile_alpha"] = aggressive_quantile
+            
+        self.aggressive_xgb = xgb.XGBRegressor(**final_aggressive_params)
+        
+        self.columns = None
+    
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """One-hot encode categorical features and align columns."""
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+            
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is not None:
+                for col in self.columns:
+                    if col not in Xd.columns:
+                        Xd[col] = 0
+                Xd = Xd[self.columns]
+        
+        return Xd
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        """Fit both XGBoost models on the data."""
+        Xd = self._encode(X, fit=True)
+        
+        # Fit both models with quiet output
+        xgb_fit_params = {"verbose": False}
+        xgb_fit_params.update(fit_params)
+        
+        self.conservative_xgb.fit(Xd, y, **xgb_fit_params)
+        self.aggressive_xgb.fit(Xd, y, **xgb_fit_params)
+    
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict using adaptive safety factor based on model agreement."""
+        Xd = self._encode(X, fit=False)
+        
+        conservative_preds = self.conservative_xgb.predict(Xd)
+        aggressive_preds = self.aggressive_xgb.predict(Xd)
+        
+        # Calculate adaptive safety factors based on model agreement
+        adaptive_safety = self._calculate_adaptive_safety(conservative_preds, aggressive_preds)
+        
+        # Use aggressive predictions as base (more efficient) but adapt safety based on disagreement
+        final_preds = aggressive_preds * adaptive_safety
+        
+        return final_preds
+    
+    def _calculate_adaptive_safety(self, conservative_preds: np.ndarray, aggressive_preds: np.ndarray) -> np.ndarray:
+        """
+        Calculate adaptive safety factors based on model agreement.
+        When models disagree more, use higher safety factor.
+        """
+        # Calculate relative disagreement between models
+        pred_ratio = conservative_preds / (aggressive_preds + 1e-8)
+        
+        # Base safety factor
+        adaptive_safety = np.full_like(pred_ratio, self.safety)
+        
+        # Increase safety when conservative model predicts much higher
+        high_disagreement = pred_ratio > 1.2
+        adaptive_safety = np.where(
+            high_disagreement,
+            self.safety + 0.1 * (pred_ratio - 1.0),  # Scale safety with disagreement
+            adaptive_safety
+        )
+        
+        # Cap the safety factor to reasonable bounds
+        adaptive_safety = np.clip(adaptive_safety, self.safety, self.safety + 0.3)
+        
+        return adaptive_safety
+    
+    def get_params(self) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            conservative_params = self.conservative_xgb.get_params() if hasattr(self.conservative_xgb, 'get_params') else {}
+        except Exception:
+            conservative_params = {}
+            
+        try:
+            aggressive_params = self.aggressive_xgb.get_params() if hasattr(self.aggressive_xgb, 'get_params') else {}
+        except Exception:
+            aggressive_params = {}
+            
+        return {
+            "alpha": self.alpha,
+            "safety": self.safety,
+            "random_state": self.random_state,
+            "conservative_params": conservative_params,
+            "aggressive_params": aggressive_params
+        }
+    
+    def set_params(self, **params) -> 'XGBXGBAdaptiveSafetyEnsemble':
+        """Set model parameters."""
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
+
+
+class XGBXGBSelectiveEnsemble(BasePredictor):
+    """
+    An ensemble regressor combining two specialized XGBoost quantile models using selective conservative usage.
+    
+    This model uses two XGBoost models with different configurations:
+    - Conservative model: Higher quantile, deeper trees, fewer estimators (for complex patterns)
+    - Aggressive model: Lower quantile, shallower trees, more estimators (for broad patterns)
+    
+    Uses aggressive model as default but selectively switches to conservative when needed.
+    """
+    
+    def __init__(
+        self, 
+        alpha: float = 0.95, 
+        safety: float = 1.05, 
+        conservative_params: Optional[Dict[str, Any]] = None, 
+        aggressive_params: Optional[Dict[str, Any]] = None,
+        random_state: int = 42,
+        # Individual parameters for conservative model
+        conservative_quantile: Optional[float] = None,
+        conservative_n_estimators: Optional[int] = None,
+        conservative_max_depth: Optional[int] = None,
+        conservative_lr: Optional[float] = None,
+        # Individual parameters for aggressive model  
+        aggressive_quantile: Optional[float] = None,
+        aggressive_n_estimators: Optional[int] = None,
+        aggressive_max_depth: Optional[int] = None,
+        aggressive_lr: Optional[float] = None,
+        **kwargs
+    ):
+        """
+        Initialize the XGBoost + XGBoost Selective Quantile Ensemble Predictor.
+        
+        Args:
+            alpha: Base quantile level (default: 0.95)
+            safety: Safety multiplier applied to final predictions (default: 1.05)
+            conservative_params: Parameters for conservative XGBoost model
+            aggressive_params: Parameters for aggressive XGBoost model
+            random_state: Random state for reproducibility
+            **kwargs: Additional parameters (ignored gracefully)
+        """
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+        
+        # Build conservative XGBoost params (higher quantile, deeper trees, fewer estimators)
+        final_conservative_params = {
+            "objective": "reg:quantileerror", 
+            "quantile_alpha": conservative_quantile if conservative_quantile is not None else min(0.99, alpha + 0.03),
+            "n_jobs": 1, 
+            "random_state": random_state
+        }
+        if conservative_params:
+            final_conservative_params.update(conservative_params)
+        
+        # Override with individual parameters if provided
+        if conservative_n_estimators is not None:
+            final_conservative_params["n_estimators"] = conservative_n_estimators
+        if conservative_max_depth is not None:
+            final_conservative_params["max_depth"] = conservative_max_depth
+        if conservative_lr is not None:
+            final_conservative_params["learning_rate"] = conservative_lr
+        if conservative_quantile is not None:
+            final_conservative_params["quantile_alpha"] = conservative_quantile
+            
+        self.conservative_xgb = xgb.XGBRegressor(**final_conservative_params)
+        
+        # Build aggressive XGBoost params (lower quantile, shallower trees, more estimators)
+        final_aggressive_params = {
+            "objective": "reg:quantileerror", 
+            "quantile_alpha": aggressive_quantile if aggressive_quantile is not None else max(0.85, alpha - 0.05),
+            "n_jobs": 1, 
+            "random_state": random_state
+        }
+        if aggressive_params:
+            final_aggressive_params.update(aggressive_params)
+        
+        # Override with individual parameters if provided
+        if aggressive_n_estimators is not None:
+            final_aggressive_params["n_estimators"] = aggressive_n_estimators
+        if aggressive_max_depth is not None:
+            final_aggressive_params["max_depth"] = aggressive_max_depth
+        if aggressive_lr is not None:
+            final_aggressive_params["learning_rate"] = aggressive_lr
+        if aggressive_quantile is not None:
+            final_aggressive_params["quantile_alpha"] = aggressive_quantile
+            
+        self.aggressive_xgb = xgb.XGBRegressor(**final_aggressive_params)
+        
+        self.columns = None
+    
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """One-hot encode categorical features and align columns."""
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+            
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is not None:
+                for col in self.columns:
+                    if col not in Xd.columns:
+                        Xd[col] = 0
+                Xd = Xd[self.columns]
+        
+        return Xd
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        """Fit both XGBoost models on the data."""
+        Xd = self._encode(X, fit=True)
+        
+        # Fit both models with quiet output
+        xgb_fit_params = {"verbose": False}
+        xgb_fit_params.update(fit_params)
+        
+        self.conservative_xgb.fit(Xd, y, **xgb_fit_params)
+        self.aggressive_xgb.fit(Xd, y, **xgb_fit_params)
+    
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict using selective conservative usage with aggressive default."""
+        Xd = self._encode(X, fit=False)
+        
+        conservative_preds = self.conservative_xgb.predict(Xd)
+        aggressive_preds = self.aggressive_xgb.predict(Xd)
+        
+        # Use aggressive as default, but switch to conservative when it predicts significantly higher
+        conservative_threshold = 1.15  # Conservative must predict at least 15% higher
+        use_conservative = conservative_preds > aggressive_preds * conservative_threshold
+        
+        final_preds = np.where(use_conservative, conservative_preds, aggressive_preds)
+        
+        return final_preds * self.safety
+    
+    def get_params(self) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            conservative_params = self.conservative_xgb.get_params() if hasattr(self.conservative_xgb, 'get_params') else {}
+        except Exception:
+            conservative_params = {}
+            
+        try:
+            aggressive_params = self.aggressive_xgb.get_params() if hasattr(self.aggressive_xgb, 'get_params') else {}
+        except Exception:
+            aggressive_params = {}
+            
+        return {
+            "alpha": self.alpha,
+            "safety": self.safety,
+            "random_state": self.random_state,
+            "conservative_params": conservative_params,
+            "aggressive_params": aggressive_params
+        }
+    
+    def set_params(self, **params) -> 'XGBXGBSelectiveEnsemble':
+        """Set model parameters."""
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
+
+
 class LGBCatQuantileEnsemble(BasePredictor):
     """
     An ensemble regressor combining LightGBM and CatBoost quantiles.

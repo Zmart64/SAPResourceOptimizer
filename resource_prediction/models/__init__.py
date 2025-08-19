@@ -15,7 +15,10 @@ from .implementations.quantile_ensemble_variants import (
     LGBCatQuantileEnsemble,
     XGBXGBQuantileEnsemble,
     XGBXGBMaxQuantileEnsemble,
-    XGBXGBWeightedQuantileEnsemble
+    XGBXGBWeightedQuantileEnsemble,
+    XGBXGBConfidenceEnsemble,
+    XGBXGBAdaptiveSafetyEnsemble,
+    XGBXGBSelectiveEnsemble
 )
 from .implementations.sizey.sizey import SizeyPredictor
 from .implementations.sklearn_models import LogisticRegression, RandomForestClassifier
@@ -32,6 +35,9 @@ __all__ = [
     "XGBXGBQuantileEnsemble",
     "XGBXGBMaxQuantileEnsemble",
     "XGBXGBWeightedQuantileEnsemble",
+    "XGBXGBConfidenceEnsemble",
+    "XGBXGBAdaptiveSafetyEnsemble",
+    "XGBXGBSelectiveEnsemble",
     "XGBoostRegressor",
     "XGBoostClassifier",
     "LightGBMRegressor",
