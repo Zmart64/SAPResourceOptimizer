@@ -41,12 +41,31 @@ def main(args):
     if hasattr(args, 'train') and args.train:
         use_defaults = True
 
+    # Handle --run-all-qe-models flag
+    model_families = args.model_families
+    if args.run_all_qe_models:
+        # Include all QE models (original + experimental ensembles)
+        qe_models = [
+            'qe_regression',
+            'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+            'xgb_xgb_ensemble', 'xgb_xgb_max_ensemble', 'xgb_xgb_weighted_ensemble',
+            'xgb_xgb_confidence_ensemble', 'xgb_xgb_adaptive_safety_ensemble', 'xgb_xgb_selective_ensemble'
+        ]
+        if model_families is None:
+            model_families = qe_models
+        else:
+            # Combine user-specified families with QE models
+            model_families = list(set(model_families + qe_models))
+    elif model_families is None:
+        # Default behavior: only run qe_regression when no flags are set
+        model_families = ['qe_regression']
+
     trainer = Trainer(
         config,
         evaluate_all_archs=args.evaluate_all_archs,
         task_type_filter=args.task_type,
         save_models=args.save_models,
-        model_families=args.model_families,
+        model_families=model_families,
         use_defaults=use_defaults
     )
 
@@ -118,6 +137,11 @@ if __name__ == "__main__":
         "--use-defaults",
         action="store_true",
         help="[Only with --run-search] Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization. Use --train for a simpler alternative."
+    )
+    parser.add_argument(
+        "--run-all-qe-models",
+        action="store_true",
+        help="Run all experimental quantile ensemble models in addition to the original qe_regression model.\nBy default, only qe_regression is run. Can be combined with --model-families."
     )
 
     args = parser.parse_args()

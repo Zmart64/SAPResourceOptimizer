@@ -30,7 +30,7 @@ class Config:
     ALLOCATION_PLOT_PATH = OUTPUT_DIR / "memory_allocation_plot.png"
     ALLOCATION_SUMMARY_REPORT_PATH = OUTPUT_DIR / "allocation_summary_report.csv"
 
-    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-sorted.csv"
+    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-4.csv"
     PROCESSED_DATA_DIR = DATA_DIR / "processed"
     BASELINE_STATS_PATH = PROCESSED_DATA_DIR / "baseline_allocation_stats.pkl"
     X_TRAIN_PATH = PROCESSED_DATA_DIR / "X_train.pkl"
@@ -45,7 +45,7 @@ class Config:
 
     TARGET_COLUMN_RAW = "max_rss"
     TARGET_COLUMN_PROCESSED = "max_rss_gb"
-    TEST_SET_FRACTION = 0.10
+    TEST_SET_FRACTION = 0.20
     RANDOM_STATE = 42
 
     BASE_FEATURES = [
@@ -79,15 +79,65 @@ class Config:
     ]
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
-    CV_SPLITS = 1
-    N_CALLS_PER_FAMILY = 1
-    NUM_PARALLEL_WORKERS = 1
+    CV_SPLITS = 3
+    N_CALLS_PER_FAMILY = 64
+    NUM_PARALLEL_WORKERS = 48
 
     MODEL_FAMILIES = {
         "qe_regression": {
             "type": "regression",
             "base_model": "quantile_ensemble",
             "class": _import_model_class("resource_prediction.models", "QuantileEnsemblePredictor"),
+        },
+        "lgb_xgb_ensemble": {
+            "type": "regression",
+            "base_model": "lgb_xgb_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "LGBXGBQuantileEnsemble"),
+        },
+        "gb_lgb_ensemble": {
+            "type": "regression",
+            "base_model": "gb_lgb_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "GBLGBQuantileEnsemble"),
+        },
+        "xgb_cat_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_cat_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBCatQuantileEnsemble"),
+        },
+        "lgb_cat_ensemble": {
+            "type": "regression",
+            "base_model": "lgb_cat_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "LGBCatQuantileEnsemble"),
+        },
+        "xgb_xgb_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_xgb_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBXGBQuantileEnsemble"),
+        },
+        "xgb_xgb_max_ensemble": {
+            "type": "regression", 
+            "base_model": "xgb_xgb_max_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBXGBMaxQuantileEnsemble"),
+        },
+        "xgb_xgb_weighted_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_xgb_weighted_quantile_ensemble", 
+            "class": _import_model_class("resource_prediction.models", "XGBXGBWeightedQuantileEnsemble"),
+        },
+        "xgb_xgb_confidence_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_xgb_confidence_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBXGBConfidenceEnsemble"),
+        },
+        "xgb_xgb_adaptive_safety_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_xgb_adaptive_safety_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBXGBAdaptiveSafetyEnsemble"),
+        },
+        "xgb_xgb_selective_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_xgb_selective_quantile_ensemble",
+            "class": _import_model_class("resource_prediction.models", "XGBXGBSelectiveEnsemble"),
         },
         "xgboost_classification": {
             "type": "classification",
@@ -152,6 +202,270 @@ class Config:
                 "type": "float",
                 "log": True,
                 "default": 0.05,
+            },
+        },
+        # LightGBM + XGBoost Ensemble
+        "lgb_xgb_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "lgb_num_leaves": {"min": 15, "max": 100, "type": "int", "default": 31},
+            "lgb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+            "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "xgb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+        },
+        # GradientBoosting + LightGBM Ensemble
+        "gb_lgb_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "gb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "gb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+            "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "lgb_num_leaves": {"min": 15, "max": 100, "type": "int", "default": 31},
+            "lgb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+        },
+        # XGBoost + CatBoost Ensemble
+        "xgb_cat_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "xgb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+            "cat_iterations": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "cat_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "cat_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+        },
+        # LightGBM + CatBoost Ensemble
+        "lgb_cat_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "lgb_num_leaves": {"min": 15, "max": 100, "type": "int", "default": 31},
+            "lgb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+            "cat_iterations": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "cat_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "cat_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+        },
+        # XGBoost + XGBoost Specialized Ensemble
+        "xgb_xgb_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
+            },
+        },
+        # XGBoost + XGBoost Max Ensemble (traditional maximum selection)
+        "xgb_xgb_max_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
+            },
+        },
+        # XGBoost + XGBoost Weighted Ensemble (intelligent routing)
+        "xgb_xgb_weighted_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
+            },
+        },
+        # XGBoost + XGBoost Confidence Ensemble (confidence-based selection)
+        "xgb_xgb_confidence_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
+            },
+        },
+        # XGBoost + XGBoost Adaptive Safety Ensemble (adaptive safety factors)
+        "xgb_xgb_adaptive_safety_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
+            },
+        },
+        # XGBoost + XGBoost Selective Ensemble (selective conservative usage)
+        "xgb_xgb_selective_ensemble": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
+            "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
+            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
+            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_lr": {
+                "min": 0.01,
+                "max": 0.10,
+                "type": "float",
+                "log": True,
+                "default": 0.03,
+            },
+            # Aggressive model parameters (lower quantile, shallower trees, more estimators)
+            "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
+            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
+            "aggressive_lr": {
+                "min": 0.03,
+                "max": 0.20,
+                "type": "float",
+                "log": True,
+                "default": 0.08,
             },
         },
         # XGBoost Regression - only XGBoost regression parameters

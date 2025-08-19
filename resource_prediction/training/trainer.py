@@ -146,10 +146,8 @@ class Trainer:
                 
             print(f"Training {family_name} with default parameters...")
             
-            # Get default parameters
-            base_model = metadata['base_model']
-            task_type = metadata['type']
-            default_params = self.config.get_default_params(base_model, task_type)
+            # Get default parameters for the family
+            default_params = self.config.get_defaults(family_name)
             
             # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
             from resource_prediction.training.hyperparameter import OptunaOptimizer
@@ -173,7 +171,7 @@ class Trainer:
             
             # Evaluate the model
             try:
-                score = optimizer._objective(trial, base_model, task_type)
+                score = optimizer._objective(trial, family_name)
                 
                 # Create a mock study for compatibility with existing evaluation code
                 mock_trial = MockTrial(default_params, score)
