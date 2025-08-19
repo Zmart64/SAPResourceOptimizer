@@ -19,8 +19,6 @@ class LightGBMRegressor(BasePredictor):
         num_leaves: int = 31,
         learning_rate: float = 0.1,
         random_state: int = 42,
-        device_type: str = 'cpu',
-        gpu_device_id: int = 0,
         **kwargs
     ):
         """
@@ -32,8 +30,6 @@ class LightGBMRegressor(BasePredictor):
             num_leaves: Maximum number of leaves in one tree
             learning_rate: Learning rate
             random_state: Random state for reproducibility
-            device_type: Device type ('cpu' or 'gpu')
-            gpu_device_id: GPU device ID (0 by default)
             **kwargs: Additional LightGBM parameters
         """
         self.alpha = alpha
@@ -48,14 +44,8 @@ class LightGBMRegressor(BasePredictor):
             'learning_rate': learning_rate,
             'random_state': random_state,
             'verbose': -1,
-            'device_type': device_type,
             'n_jobs': 1
         }
-        
-        # Add GPU parameters if using GPU device
-        if device_type == 'gpu':
-            lgb_params['gpu_device_id'] = gpu_device_id
-        
         lgb_params.update(kwargs)
         
         self.model = lgb.LGBMRegressor(**lgb_params)
@@ -106,8 +96,6 @@ class LightGBMClassifier(BasePredictor):
         num_leaves: int = 31,
         learning_rate: float = 0.1,
         random_state: int = 42,
-        device_type: str = 'cpu',
-        gpu_device_id: int = 0,
         **kwargs
     ):
         """
@@ -121,8 +109,6 @@ class LightGBMClassifier(BasePredictor):
             num_leaves: Maximum number of leaves in one tree
             learning_rate: Learning rate
             random_state: Random state for reproducibility
-            device_type: Device type ('cpu' or 'gpu')
-            gpu_device_id: GPU device ID (0 by default)
             **kwargs: Additional LightGBM parameters
         """
         self.n_bins = n_bins
@@ -136,14 +122,8 @@ class LightGBMClassifier(BasePredictor):
             'learning_rate': learning_rate,
             'random_state': random_state,
             'verbose': -1,
-            'device_type': device_type,
             'n_jobs': 1
         }
-        
-        # Add GPU parameters if using GPU device
-        if device_type == 'gpu':
-            lgb_params['gpu_device_id'] = gpu_device_id
-        
         lgb_params.update(kwargs)
         
         self.model = lgb.LGBMClassifier(**lgb_params)

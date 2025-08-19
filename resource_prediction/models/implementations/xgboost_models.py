@@ -19,8 +19,6 @@ class XGBoostRegressor(BasePredictor):
         max_depth: int = 6,
         learning_rate: float = 0.1,
         random_state: int = 42,
-        tree_method: str = 'hist',
-        gpu_id: int = 0,
         **kwargs
     ):
         """
@@ -32,8 +30,6 @@ class XGBoostRegressor(BasePredictor):
             max_depth: Maximum tree depth
             learning_rate: Learning rate
             random_state: Random state for reproducibility
-            tree_method: Tree construction algorithm ('hist', 'gpu_hist' for GPU)
-            gpu_id: GPU device ID (0 by default)
             **kwargs: Additional XGBoost parameters
         """
         self.alpha = alpha
@@ -47,14 +43,8 @@ class XGBoostRegressor(BasePredictor):
             'max_depth': max_depth,
             'learning_rate': learning_rate,
             'random_state': random_state,
-            'tree_method': tree_method,
             'n_jobs': 1
         }
-        
-        # Add GPU parameters if using GPU tree method
-        if tree_method == 'gpu_hist':
-            xgb_params['gpu_id'] = gpu_id
-        
         xgb_params.update(kwargs)
         
         self.model = xgb.XGBRegressor(**xgb_params)
@@ -105,8 +95,6 @@ class XGBoostClassifier(BasePredictor):
         max_depth: int = 6,
         learning_rate: float = 0.1,
         random_state: int = 42,
-        tree_method: str = 'hist',
-        gpu_id: int = 0,
         **kwargs
     ):
         """
@@ -119,8 +107,6 @@ class XGBoostClassifier(BasePredictor):
             max_depth: Maximum tree depth
             learning_rate: Learning rate
             random_state: Random state for reproducibility
-            tree_method: Tree construction algorithm ('hist', 'gpu_hist' for GPU)
-            gpu_id: GPU device ID (0 by default)
             **kwargs: Additional XGBoost parameters
         """
         self.n_bins = n_bins
@@ -132,14 +118,8 @@ class XGBoostClassifier(BasePredictor):
             'max_depth': max_depth,
             'learning_rate': learning_rate,
             'random_state': random_state,
-            'tree_method': tree_method,
             'n_jobs': 1
         }
-        
-        # Add GPU parameters if using GPU tree method
-        if tree_method == 'gpu_hist':
-            xgb_params['gpu_id'] = gpu_id
-        
         xgb_params.update(kwargs)
         
         self.model = xgb.XGBClassifier(**xgb_params)
