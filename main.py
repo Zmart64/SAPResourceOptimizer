@@ -43,22 +43,28 @@ def main(args):
 
     # Handle --run-all-qe-models flag
     model_families = args.model_families
+    
+    # Define experimental QE models once to avoid duplication
+    experimental_qe_models = [
+        'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+        'xgb_xgb_ensemble', 'xgb_xgb_max_ensemble', 'xgb_xgb_weighted_ensemble',
+        'xgb_xgb_confidence_ensemble', 'xgb_xgb_adaptive_safety_ensemble', 'xgb_xgb_selective_ensemble'
+    ]
+    
     if args.run_all_qe_models:
         # Include all QE models (original + experimental ensembles)
-        qe_models = [
-            'qe_regression',
-            'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
-            'xgb_xgb_ensemble', 'xgb_xgb_max_ensemble', 'xgb_xgb_weighted_ensemble',
-            'xgb_xgb_confidence_ensemble', 'xgb_xgb_adaptive_safety_ensemble', 'xgb_xgb_selective_ensemble'
-        ]
+        qe_models = ['qe_regression'] + experimental_qe_models
         if model_families is None:
             model_families = qe_models
         else:
             # Combine user-specified families with QE models
             model_families = list(set(model_families + qe_models))
     elif model_families is None:
-        # Default behavior: only run qe_regression when no flags are set
-        model_families = ['qe_regression']
+        # Default behavior: run all models except experimental QE ensembles
+        all_models = list(Config.MODEL_FAMILIES.keys())
+        model_families = [model for model in all_models if model not in experimental_qe_models]
+    
+    print("running model families:", model_families)
 
     trainer = Trainer(
         config,
