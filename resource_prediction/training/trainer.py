@@ -436,8 +436,15 @@ class Trainer:
             generate_summary_report(
                 report_data, self.config.ALLOCATION_SUMMARY_REPORT_PATH)
 
-        if should_eval_all and not regr_df.empty and not class_df.empty:
-            all_results = pd.concat([regr_df, class_df], ignore_index=True)
+        if not regr_df.empty or not class_df.empty:
+            # Combine available results for plotting
+            all_results_dfs = []
+            if not regr_df.empty:
+                all_results_dfs.append(regr_df)
+            if not class_df.empty:
+                all_results_dfs.append(class_df)
+            
+            all_results = pd.concat(all_results_dfs, ignore_index=True)
             if not all_results.empty:
                 plt.figure(figsize=(10, 8))
                 order = all_results.sort_values("score_hold")["model"]
