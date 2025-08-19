@@ -32,7 +32,7 @@ class Config:
     ALLOCATION_PLOT_PATH = OUTPUT_DIR / "memory_allocation_plot.png"
     ALLOCATION_SUMMARY_REPORT_PATH = OUTPUT_DIR / "allocation_summary_report.csv"
 
-    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-sorted.csv"
+    RAW_DATA_PATH = DATA_DIR / "raw" / "build-data-4.csv"
     PROCESSED_DATA_DIR = DATA_DIR / "processed"
     BASELINE_STATS_PATH = PROCESSED_DATA_DIR / "baseline_allocation_stats.pkl"
     X_TRAIN_PATH = PROCESSED_DATA_DIR / "X_train.pkl"
@@ -82,8 +82,8 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 1
-    NUM_PARALLEL_WORKERS = 1
+    N_CALLS_PER_FAMILY = 51
+    NUM_PARALLEL_WORKERS = 32
 
     MODEL_FAMILIES = {
         "qe_regression": {
@@ -95,6 +95,7 @@ class Config:
             "type": "classification",
             "base_model": "xgboost",
             "class": XGBoostClassifier,
+            "confidence_threshold_tuning": True,
         },
         "xgboost_regression": {
             "type": "regression",
@@ -105,11 +106,13 @@ class Config:
             "type": "classification",
             "base_model": "lightgbm",
             "class": LightGBMClassifier,
+            "confidence_threshold_tuning": True,
         },
         "rf_classification": {
             "type": "classification",
             "base_model": "random_forest",
             "class": RandomForestClassifier,
+            "confidence_threshold_tuning": True,
         },
         "lightgbm_regression": {
             "type": "regression",
@@ -120,6 +123,7 @@ class Config:
             "type": "classification",
             "base_model": "logistic_regression",
             "class": LogisticRegression,
+            "confidence_threshold_tuning": True,
         },
         "sizey_regression": {
             "type": "regression",
@@ -129,7 +133,6 @@ class Config:
     }
 
     # Hyperparameter configuration system
-    # Each model family defines ONLY the parameters it actually needs
     # No shared parameters, no cross-contamination between models
     HYPERPARAMETER_CONFIGS = {
         # Quantile Ensemble Regression - only QE-specific parameters
@@ -260,47 +263,6 @@ class Config:
     }
 
     @staticmethod
-    def get_default_params(base_model, task_type):
-        """
-        Get default parameter values for a model without hyperparameter search.
-
-        Args:
-            base_model (str): The base algorithm name (e.g., 'xgboost').
-            task_type (str): The task type ('regression' or 'classification').
-
-        Returns:
-            dict: A dictionary of default parameter values.
-        """
-        params = {}
-
-        # Add task-specific common parameters (currently only for classification)
-        task_common_key = f"{task_type}_common"
-        for param, config in Config.HYPERPARAMETER_CONFIGS.get(
-            task_common_key, {}
-        ).items():
-            if "default" in config:
-                params[param] = config["default"]
-            elif "choices" in config:
-                params[param] = config["choices"][0]
-
-        # Add model-specific parameters
-        model_config = Config.HYPERPARAMETER_CONFIGS.get(base_model, {})
-        if task_type in model_config:
-            # Model has task-specific config
-            model_params = model_config[task_type]
-        else:
-            # Model uses same config for all tasks
-            model_params = model_config
-
-        for param, config in model_params.items():
-            if "default" in config:
-                params[param] = config["default"]
-            elif "choices" in config:
-                params[param] = config["choices"][0]
-
-        return params
-
-    @staticmethod
     def _suggest_param(trial, param_name, param_config):
         """
         Helper method to generate optuna suggestion based on parameter configuration.
@@ -330,54 +292,55 @@ class Config:
             )
 
     @staticmethod
+    def _apply_family_specific_transformations(params, family_name):
+        """Applies model-specific transformations, like setting objectives."""
+        if family_name == "xgboost_regression":
+            params["objective"] = "reg:quantileerror"
+            if "alpha" in params:
+                params["quantile_alpha"] = params.pop("alpha")
+        elif family_name == "lightgbm_regression":
+            params["objective"] = "quantile"
+        elif family_name == "lr_classification":
+            if params.get("penalty") != "elasticnet" and "l1_ratio" in params:
+                params.pop("l1_ratio")
+            # Pruning for incompatible solver/penalty combinations
+            if (
+                params.get("solver") == "liblinear"
+                and params.get("penalty") == "elasticnet"
+            ) or (
+                params.get("penalty") == "elasticnet" and params.get("solver") != "saga"
+            ):
+                raise optuna.exceptions.TrialPruned()
+        return params
+
+    @staticmethod
     def get_search_space(trial, family_name):
         """
         Defines the hyperparameter search space for a given model family.
 
         Args:
             trial (optuna.trial.Trial): The Optuna trial object.
-            family_name (str): The model family name (e.g., 'xgboost_regression', 'lightgbm_classification').
+            family_name (str): The model family name.
 
         Returns:
             dict: A dictionary of suggested hyperparameters for the trial.
         """
         params = {}
-
-        # Get parameters for the specific model family
         family_config = Config.HYPERPARAMETER_CONFIGS.get(family_name, {})
         if not family_config:
-            raise ValueError(
-                f"No hyperparameter configuration found for model family '{family_name}'"
-            )
+            raise ValueError(f"No config for model family '{family_name}'")
 
         for param, config in family_config.items():
             params[param] = Config._suggest_param(trial, param, config)
 
-        # Add model-specific transformations for internal parameter names
-        if family_name == "xgboost_regression":
-            # For XGBoost regression, set specific objective and transform alpha to quantile_alpha
-            params["objective"] = "reg:quantileerror"
-            if "alpha" in params:
-                params["quantile_alpha"] = params.pop("alpha")
+        params = Config._apply_family_specific_transformations(params, family_name)
 
-        elif family_name == "lightgbm_regression":
-            # For LightGBM regression, set objective to quantile
-            params["objective"] = "quantile"
-
-        elif family_name == "lr_classification":
-            # Handle special constraint for logistic regression
-            if (
-                params.get("solver") == "liblinear"
-                and params.get("penalty") == "elasticnet"
-            ):
-                raise optuna.exceptions.TrialPruned()
-            if params.get("penalty") != "elasticnet" and "l1_ratio" in params:
-                # Remove l1_ratio if penalty is not elasticnet
-                params.pop("l1_ratio")
-            elif (
-                params.get("penalty") == "elasticnet" and params.get("solver") != "saga"
-            ):
-                raise optuna.exceptions.TrialPruned()
+        # Add confidence threshold for classification models if enabled
+        family_info = Config.MODEL_FAMILIES.get(family_name, {})
+        if family_info.get("confidence_threshold_tuning"):
+            params["confidence_threshold"] = trial.suggest_float(
+                "confidence_threshold", 0.7, 1.0, step=0.05
+            )
 
         return params
 
@@ -387,40 +350,20 @@ class Config:
         Get default hyperparameters for a given model family.
 
         Args:
-            family_name (str): The model family name (e.g., 'xgboost_regression').
+            family_name (str): The model family name.
 
         Returns:
             dict: A dictionary of default hyperparameters.
         """
         params = {}
-
-        # Get parameters for the specific model family
         family_config = Config.HYPERPARAMETER_CONFIGS.get(family_name, {})
         if not family_config:
-            raise ValueError(
-                f"No hyperparameter configuration found for model family '{family_name}'"
-            )
+            raise ValueError(f"No config for model family '{family_name}'")
 
         for param, config in family_config.items():
             if "default" in config:
                 params[param] = config["default"]
             else:
-                raise ValueError(
-                    f"No default value specified for parameter '{param}' in family '{family_name}'"
-                )
+                raise ValueError(f"No default for '{param}' in '{family_name}'")
 
-        # Apply the same transformations as in get_search_space
-        if family_name == "xgboost_regression":
-            params["objective"] = "reg:quantileerror"
-            if "alpha" in params:
-                params["quantile_alpha"] = params.pop("alpha")
-
-        elif family_name == "lightgbm_regression":
-            params["objective"] = "quantile"
-
-        elif family_name == "lr_classification":
-            # Apply logistic regression constraints for defaults
-            if params.get("penalty") != "elasticnet" and "l1_ratio" in params:
-                params.pop("l1_ratio")
-
-        return params
+        return Config._apply_family_specific_transformations(params, family_name)

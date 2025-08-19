@@ -18,7 +18,8 @@ pipeline. The subpackages expose cohesive pieces of functionality:
 
 from .config import Config
 from .data_processing import DataPreprocessor
-from .training import Trainer, OptunaOptimizer, QuantileEnsemblePredictor
+from .models import QuantileEnsemblePredictor
+from .training import OptunaOptimizer, Trainer
 
 __all__ = [
     "Config",

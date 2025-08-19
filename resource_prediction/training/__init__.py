@@ -12,7 +12,7 @@ optimisation with Optuna and final model evaluation.  It provides:
     optimisation, and reporting together.
 """
 
-from .hyperparameter import OptunaOptimizer, QuantileEnsemblePredictor
+from .hyperparameter import OptunaOptimizer
 from .trainer import Trainer
 
-__all__ = ["OptunaOptimizer", "QuantileEnsemblePredictor", "Trainer"]
+__all__ = ["OptunaOptimizer", "Trainer"]

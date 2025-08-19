@@ -69,11 +69,11 @@ make dev
 ```
 
 **Benefits of DeployableModel Architecture:**
-- 🔄 **Unified Interface** - All models implement `BasePredictor` for consistency
-- 🧠 **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
-- 🏗️ **Production Ready** - Complete serialization with metadata and preprocessing pipeline
-- 📦 **Extensible Design** - Easy to add new models following the same pattern
-- ✨ **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
+-  **Unified Interface** - All models implement `BasePredictor` for consistency
+-  **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
+-  **Production Ready** - Complete serialization with metadata and preprocessing pipeline
+-  **Extensible Design** - Easy to add new models following the same pattern
+-  **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
 
 ### Documentation
 
@@ -338,11 +338,11 @@ The architecture makes it simple to add new models. Both hyperparameter search a
 **That's it!** The system now uses dynamic model instantiation - no hardcoded model creation needed in evaluation!
 
 **Key Benefits of This Architecture:**
-- ✅ **No Parameter Filtering** - Models accept parameters directly from hyperparameter search
-- ✅ **Consistent Interface** - Same model class used in search and evaluation  
-- ✅ **Clean Implementation** - Models handle their own parameter validation
-- ✅ **Dynamic Instantiation** - Evaluation uses `metadata['class']` for automatic model creation
-- ✅ **No Hardcoded Logic** - Adding models doesn't require updating evaluation code
+-  **No Parameter Filtering** - Models accept parameters directly from hyperparameter search
+-  **Consistent Interface** - Same model class used in search and evaluation  
+-  **Clean Implementation** - Models handle their own parameter validation
+-  **Dynamic Instantiation** - Evaluation uses `metadata['class']` for automatic model creation
+-  **No Hardcoded Logic** - Adding models doesn't require updating evaluation code
 
 **Model-Specific Parameters**: Only include parameters that your specific model actually uses:
 - Classification models automatically get `n_bins`, `strategy` from the `classification_common` config
