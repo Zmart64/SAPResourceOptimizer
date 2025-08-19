@@ -30,9 +30,13 @@ class LGBXGBQuantileEnsemble(BasePredictor):
         lgb_n_estimators: Optional[int] = None,
         lgb_num_leaves: Optional[int] = None,
         lgb_lr: Optional[float] = None,
+        lgb_device_type: str = 'cpu',
+        lgb_gpu_device_id: int = 0,
         xgb_n_estimators: Optional[int] = None,
         xgb_max_depth: Optional[int] = None,
         xgb_lr: Optional[float] = None,
+        xgb_tree_method: str = 'hist',
+        xgb_gpu_id: int = 0,
         **kwargs
     ):
         """
@@ -56,8 +60,14 @@ class LGBXGBQuantileEnsemble(BasePredictor):
             "alpha": alpha,
             "random_state": random_state,
             "verbose": -1,
+            "device_type": lgb_device_type,
             "n_jobs": 1
         }
+        
+        # Add GPU parameters for LightGBM if using GPU
+        if lgb_device_type == 'gpu':
+            final_lgb_params["gpu_device_id"] = lgb_gpu_device_id
+        
         if lgb_params:
             final_lgb_params.update(lgb_params)
         
@@ -76,8 +86,14 @@ class LGBXGBQuantileEnsemble(BasePredictor):
             "objective": "reg:quantileerror", 
             "quantile_alpha": alpha,
             "n_jobs": 1, 
-            "random_state": random_state
+            "random_state": random_state,
+            "tree_method": xgb_tree_method
         }
+        
+        # Add GPU parameters for XGBoost if using GPU
+        if xgb_tree_method == 'gpu_hist':
+            final_xgb_params["gpu_id"] = xgb_gpu_id
+        
         if xgb_params:
             final_xgb_params.update(xgb_params)
         
@@ -183,6 +199,8 @@ class GBLGBQuantileEnsemble(BasePredictor):
         lgb_n_estimators: Optional[int] = None,
         lgb_num_leaves: Optional[int] = None,
         lgb_lr: Optional[float] = None,
+        lgb_device_type: str = 'cpu',
+        lgb_gpu_device_id: int = 0,
         **kwargs
     ):
         """Initialize the GradientBoosting + LightGBM Quantile Ensemble Predictor."""
@@ -210,8 +228,14 @@ class GBLGBQuantileEnsemble(BasePredictor):
             "alpha": alpha,
             "random_state": random_state,
             "verbose": -1,
+            "device_type": lgb_device_type,
             "n_jobs": 1
         }
+        
+        # Add GPU parameters for LightGBM if using GPU
+        if lgb_device_type == 'gpu':
+            final_lgb_params["gpu_device_id"] = lgb_gpu_device_id
+        
         if lgb_params:
             final_lgb_params.update(lgb_params)
         
@@ -310,9 +334,13 @@ class XGBCatQuantileEnsemble(BasePredictor):
         xgb_n_estimators: Optional[int] = None,
         xgb_max_depth: Optional[int] = None,
         xgb_lr: Optional[float] = None,
+        xgb_tree_method: str = 'hist',
+        xgb_gpu_id: int = 0,
         cat_iterations: Optional[int] = None,
         cat_depth: Optional[int] = None,
         cat_lr: Optional[float] = None,
+        cat_task_type: str = 'CPU',
+        cat_gpu_device_id: int = 0,
         **kwargs
     ):
         """Initialize the XGBoost + CatBoost Quantile Ensemble Predictor."""
@@ -325,8 +353,14 @@ class XGBCatQuantileEnsemble(BasePredictor):
             "objective": "reg:quantileerror", 
             "quantile_alpha": alpha,
             "n_jobs": 1, 
-            "random_state": random_state
+            "random_state": random_state,
+            "tree_method": xgb_tree_method
         }
+        
+        # Add GPU parameters for XGBoost if using GPU
+        if xgb_tree_method == 'gpu_hist':
+            final_xgb_params["gpu_id"] = xgb_gpu_id
+        
         if xgb_params:
             final_xgb_params.update(xgb_params)
         
@@ -343,8 +377,14 @@ class XGBCatQuantileEnsemble(BasePredictor):
         final_cat_params = {
             "loss_function": f"Quantile:alpha={alpha}",
             "random_state": random_state,
-            "verbose": False
+            "verbose": False,
+            "task_type": cat_task_type
         }
+        
+        # Add GPU parameters for CatBoost if using GPU
+        if cat_task_type == 'GPU':
+            final_cat_params["devices"] = f"0:{cat_gpu_device_id}"
+        
         if cat_params:
             final_cat_params.update(cat_params)
         
@@ -445,9 +485,13 @@ class LGBCatQuantileEnsemble(BasePredictor):
         lgb_n_estimators: Optional[int] = None,
         lgb_num_leaves: Optional[int] = None,
         lgb_lr: Optional[float] = None,
+        lgb_device_type: str = 'cpu',
+        lgb_gpu_device_id: int = 0,
         cat_iterations: Optional[int] = None,
         cat_depth: Optional[int] = None,
         cat_lr: Optional[float] = None,
+        cat_task_type: str = 'CPU',
+        cat_gpu_device_id: int = 0,
         **kwargs
     ):
         """Initialize the LightGBM + CatBoost Quantile Ensemble Predictor."""
@@ -461,8 +505,14 @@ class LGBCatQuantileEnsemble(BasePredictor):
             "alpha": alpha,
             "random_state": random_state,
             "verbose": -1,
+            "device_type": lgb_device_type,
             "n_jobs": 1
         }
+        
+        # Add GPU parameters for LightGBM if using GPU
+        if lgb_device_type == 'gpu':
+            final_lgb_params["gpu_device_id"] = lgb_gpu_device_id
+        
         if lgb_params:
             final_lgb_params.update(lgb_params)
         
@@ -479,8 +529,14 @@ class LGBCatQuantileEnsemble(BasePredictor):
         final_cat_params = {
             "loss_function": f"Quantile:alpha={alpha}",
             "random_state": random_state,
-            "verbose": False
+            "verbose": False,
+            "task_type": cat_task_type
         }
+        
+        # Add GPU parameters for CatBoost if using GPU
+        if cat_task_type == 'GPU':
+            final_cat_params["devices"] = f"0:{cat_gpu_device_id}"
+        
         if cat_params:
             final_cat_params.update(cat_params)
         
@@ -585,11 +641,15 @@ class XGBXGBQuantileEnsemble(BasePredictor):
         conservative_n_estimators: Optional[int] = None,
         conservative_max_depth: Optional[int] = None,
         conservative_lr: Optional[float] = None,
+        conservative_tree_method: str = 'hist',
+        conservative_gpu_id: int = 0,
         # Individual parameters for aggressive model  
         aggressive_quantile: Optional[float] = None,
         aggressive_n_estimators: Optional[int] = None,
         aggressive_max_depth: Optional[int] = None,
         aggressive_lr: Optional[float] = None,
+        aggressive_tree_method: str = 'hist',
+        aggressive_gpu_id: int = 0,
         **kwargs
     ):
         """
@@ -612,8 +672,14 @@ class XGBXGBQuantileEnsemble(BasePredictor):
             "objective": "reg:quantileerror", 
             "quantile_alpha": conservative_quantile if conservative_quantile is not None else min(0.99, alpha + 0.03),
             "n_jobs": 1, 
-            "random_state": random_state
+            "random_state": random_state,
+            "tree_method": conservative_tree_method
         }
+        
+        # Add GPU parameters for conservative model if using GPU
+        if conservative_tree_method == 'gpu_hist':
+            final_conservative_params["gpu_id"] = conservative_gpu_id
+        
         if conservative_params:
             final_conservative_params.update(conservative_params)
         
@@ -634,8 +700,14 @@ class XGBXGBQuantileEnsemble(BasePredictor):
             "objective": "reg:quantileerror", 
             "quantile_alpha": aggressive_quantile if aggressive_quantile is not None else max(0.85, alpha - 0.05),
             "n_jobs": 1, 
-            "random_state": random_state
+            "random_state": random_state,
+            "tree_method": aggressive_tree_method
         }
+        
+        # Add GPU parameters for aggressive model if using GPU
+        if aggressive_tree_method == 'gpu_hist':
+            final_aggressive_params["gpu_id"] = aggressive_gpu_id
+        
         if aggressive_params:
             final_aggressive_params.update(aggressive_params)
         

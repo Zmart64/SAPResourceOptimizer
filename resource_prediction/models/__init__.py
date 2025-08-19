@@ -17,6 +17,7 @@ from .implementations.quantile_ensemble_variants import (
 )
 from .implementations.sizey.sizey import SizeyPredictor
 from .implementations.sklearn_models import LogisticRegression, RandomForestClassifier
+from .implementations.gpu_sklearn_models import GPURandomForestClassifier, GPULogisticRegression
 from .implementations.xgboost_models import XGBoostClassifier, XGBoostRegressor
 from .unified_wrapper import DeployableModel, load_model
 
@@ -34,6 +35,8 @@ __all__ = [
     "LightGBMClassifier",
     "RandomForestClassifier",
     "LogisticRegression",
+    "GPURandomForestClassifier",
+    "GPULogisticRegression",
     "SizeyPredictor",
     "DeployableModel",
     "load_model",

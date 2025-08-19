@@ -144,6 +144,16 @@ class Config:
             "base_model": "logistic_regression",
             "class": _import_model_class("resource_prediction.models", "LogisticRegression"),
         },
+        "gpu_rf_classification": {
+            "type": "classification",
+            "base_model": "gpu_random_forest",
+            "class": _import_model_class("resource_prediction.models", "GPURandomForestClassifier"),
+        },
+        "gpu_lr_classification": {
+            "type": "classification",
+            "base_model": "gpu_logistic_regression",
+            "class": _import_model_class("resource_prediction.models", "GPULogisticRegression"),
+        },
         "sizey_regression": {
             "type": "regression",
             "base_model": "sizey",
@@ -178,6 +188,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "xgb_tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "xgb_gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # LightGBM + XGBoost Ensemble
         "lgb_xgb_ensemble": {
@@ -193,6 +205,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "lgb_device_type": {"choices": ["cpu", "gpu"], "default": "cpu"},
+            "lgb_gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
             "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
             "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
             "xgb_lr": {
@@ -202,6 +216,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "xgb_tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "xgb_gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # GradientBoosting + LightGBM Ensemble
         "gb_lgb_ensemble": {
@@ -226,6 +242,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "lgb_device_type": {"choices": ["cpu", "gpu"], "default": "cpu"},
+            "lgb_gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # XGBoost + CatBoost Ensemble
         "xgb_cat_ensemble": {
@@ -241,6 +259,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "xgb_tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "xgb_gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
             "cat_iterations": {"min": 200, "max": 700, "type": "int", "default": 300},
             "cat_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
             "cat_lr": {
@@ -250,6 +270,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "cat_task_type": {"choices": ["CPU", "GPU"], "default": "CPU"},
+            "cat_gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # LightGBM + CatBoost Ensemble
         "lgb_cat_ensemble": {
@@ -265,6 +287,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "lgb_device_type": {"choices": ["cpu", "gpu"], "default": "cpu"},
+            "lgb_gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
             "cat_iterations": {"min": 200, "max": 700, "type": "int", "default": 300},
             "cat_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
             "cat_lr": {
@@ -274,6 +298,8 @@ class Config:
                 "log": True,
                 "default": 0.05,
             },
+            "cat_task_type": {"choices": ["CPU", "GPU"], "default": "CPU"},
+            "cat_gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # XGBoost + XGBoost Specialized Ensemble
         "xgb_xgb_ensemble": {
@@ -291,6 +317,8 @@ class Config:
                 "log": True,
                 "default": 0.03,
             },
+            "conservative_tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "conservative_gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
             # Aggressive model parameters (lower quantile, shallower trees, more estimators)
             "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
             "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
@@ -302,6 +330,8 @@ class Config:
                 "log": True,
                 "default": 0.08,
             },
+            "aggressive_tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "aggressive_gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # XGBoost Regression - only XGBoost regression parameters
         "xgboost_regression": {
@@ -316,6 +346,8 @@ class Config:
                 "log": True,
                 "default": 0.1,
             },
+            "tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # XGBoost Classification - only XGBoost classification parameters
         "xgboost_classification": {
@@ -334,6 +366,8 @@ class Config:
                 "log": True,
                 "default": 0.1,
             },
+            "tree_method": {"choices": ["hist", "gpu_hist"], "default": "hist"},
+            "gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # LightGBM Regression - only LightGBM regression parameters
         "lightgbm_regression": {
@@ -348,6 +382,8 @@ class Config:
                 "log": True,
                 "default": 0.1,
             },
+            "device_type": {"choices": ["cpu", "gpu"], "default": "cpu"},
+            "gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
             # max_depth is optional for LightGBM, not included by default
         },
         # LightGBM Classification - only LightGBM classification parameters
@@ -368,6 +404,8 @@ class Config:
                 "log": True,
                 "default": 0.1,
             },
+            "device_type": {"choices": ["cpu", "gpu"], "default": "cpu"},
+            "gpu_device_id": {"min": 0, "max": 7, "type": "int", "default": 0},
         },
         # Random Forest Classification - only RF parameters (no alpha, no learning_rate)
         "rf_classification": {
@@ -421,6 +459,37 @@ class Config:
                 "choices": ["smoothed_mape", "neg_mean_squared_error"],
                 "default": "smoothed_mape",
             },
+        },
+        # GPU Random Forest Classification - GPU-accelerated Random Forest parameters
+        "gpu_rf_classification": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
+            "strategy": {
+                "choices": ["uniform", "quantile", "kmeans"],
+                "default": "uniform",
+            },
+            "n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "max_depth": {"min": 6, "max": 15, "type": "int", "default": 10},
+            "use_gpu": {"choices": [True, False], "default": False},
+            "gpu_id": {"min": 0, "max": 7, "type": "int", "default": 0},
+        },
+        # GPU Logistic Regression Classification - GPU-accelerated Logistic Regression parameters
+        "gpu_lr_classification": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
+            "strategy": {
+                "choices": ["uniform", "quantile", "kmeans"],
+                "default": "uniform",
+            },
+            "C": {
+                "min": 1e-2,
+                "max": 10.0,
+                "type": "float",
+                "log": True,
+                "default": 1.0,
+            },
+            "penalty": {"choices": ["l1", "l2", "none"], "default": "l2"},
+            "use_gpu": {"choices": [True, False], "default": False},
         },
     }
 
@@ -544,6 +613,38 @@ class Config:
             ):
                 raise optuna.exceptions.TrialPruned()
 
+        # Handle conditional GPU parameters
+        # Remove GPU-specific parameters if not using GPU for XGBoost models
+        if 'tree_method' in params and params['tree_method'] != 'gpu_hist' and 'gpu_id' in params:
+            params.pop('gpu_id')
+        
+        xgb_tree_params = [p for p in params.keys() if p.endswith('_tree_method')]
+        for tree_param in xgb_tree_params:
+            gpu_id_param = tree_param.replace('tree_method', 'gpu_id')
+            if params.get(tree_param) != 'gpu_hist' and gpu_id_param in params:
+                params.pop(gpu_id_param)
+        
+        # Remove GPU-specific parameters if not using GPU for LightGBM models  
+        if 'device_type' in params and params['device_type'] != 'gpu' and 'gpu_device_id' in params:
+            params.pop('gpu_device_id')
+        
+        lgb_device_params = [p for p in params.keys() if p.endswith('_device_type')]
+        for device_param in lgb_device_params:
+            gpu_device_param = device_param.replace('device_type', 'gpu_device_id')
+            if params.get(device_param) != 'gpu' and gpu_device_param in params:
+                params.pop(gpu_device_param)
+        
+        # Remove GPU-specific parameters if not using GPU for CatBoost models
+        cat_task_params = [p for p in params.keys() if p.endswith('_task_type')]
+        for task_param in cat_task_params:
+            gpu_device_param = task_param.replace('task_type', 'gpu_device_id')
+            if params.get(task_param) != 'GPU' and gpu_device_param in params:
+                params.pop(gpu_device_param)
+        
+        # Remove GPU-specific parameters if not using GPU for new GPU models
+        if 'use_gpu' in params and not params['use_gpu'] and 'gpu_id' in params:
+            params.pop('gpu_id')
+
         return params
 
     @staticmethod
@@ -587,5 +688,37 @@ class Config:
             # Apply logistic regression constraints for defaults
             if params.get("penalty") != "elasticnet" and "l1_ratio" in params:
                 params.pop("l1_ratio")
+
+        # Handle conditional GPU parameters for defaults
+        # Remove GPU-specific parameters if not using GPU for XGBoost models
+        if 'tree_method' in params and params['tree_method'] != 'gpu_hist' and 'gpu_id' in params:
+            params.pop('gpu_id')
+        
+        xgb_tree_params = [p for p in params.keys() if p.endswith('_tree_method')]
+        for tree_param in xgb_tree_params:
+            gpu_id_param = tree_param.replace('tree_method', 'gpu_id')
+            if params.get(tree_param) != 'gpu_hist' and gpu_id_param in params:
+                params.pop(gpu_id_param)
+        
+        # Remove GPU-specific parameters if not using GPU for LightGBM models  
+        if 'device_type' in params and params['device_type'] != 'gpu' and 'gpu_device_id' in params:
+            params.pop('gpu_device_id')
+        
+        lgb_device_params = [p for p in params.keys() if p.endswith('_device_type')]
+        for device_param in lgb_device_params:
+            gpu_device_param = device_param.replace('device_type', 'gpu_device_id')
+            if params.get(device_param) != 'gpu' and gpu_device_param in params:
+                params.pop(gpu_device_param)
+        
+        # Remove GPU-specific parameters if not using GPU for CatBoost models
+        cat_task_params = [p for p in params.keys() if p.endswith('_task_type')]
+        for task_param in cat_task_params:
+            gpu_device_param = task_param.replace('task_type', 'gpu_device_id')
+            if params.get(task_param) != 'GPU' and gpu_device_param in params:
+                params.pop(gpu_device_param)
+        
+        # Remove GPU-specific parameters if not using GPU for new GPU models
+        if 'use_gpu' in params and not params['use_gpu'] and 'gpu_id' in params:
+            params.pop('gpu_id')
 
         return params

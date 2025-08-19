@@ -31,6 +31,8 @@ class QuantileEnsemblePredictor(BasePredictor):
         xgb_n_estimators: Optional[int] = None,
         xgb_max_depth: Optional[int] = None,
         xgb_lr: Optional[float] = None,  # Keep current naming
+        xgb_tree_method: str = 'hist',
+        xgb_gpu_id: int = 0,
         **kwargs  # Accept any additional parameters gracefully
     ):
         """
@@ -74,8 +76,14 @@ class QuantileEnsemblePredictor(BasePredictor):
             "objective": "reg:quantileerror", 
             "quantile_alpha": alpha,
             "n_jobs": 1, 
-            "random_state": random_state
+            "random_state": random_state,
+            "tree_method": xgb_tree_method
         }
+        
+        # Add GPU parameters for XGBoost if using GPU
+        if xgb_tree_method == 'gpu_hist':
+            final_xgb_params["gpu_id"] = xgb_gpu_id
+        
         if xgb_params:
             final_xgb_params.update(xgb_params)
         
