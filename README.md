@@ -108,23 +108,23 @@ poetry run python serve_docs.py
 poetry shell
 
 # Train all models with default parameters (simple and fast)
-python main.py --train
+python main.py --train-default
 
 # Train only classification models
-python main.py --train --task-type classification
+python main.py --train-default --task-type classification
 
 # Train specific model families
-python main.py --train --model-families xgboost_classification lightgbm_regression
+python main.py --train-default --model-families xgboost_classification lightgbm_regression
 ```
 
 ### 2. Advanced Training with Hyperparameter Search
 
 ```console
 # Run full pipeline with hyperparameter optimization for classification
-python main.py --model-type classification --run-search
+python main.py --run-search --task-type classification
 
 # Now regression, but re-use preprocessed data from first run  
-python main.py --model-type regression --skip-preprocessing --run-search
+python main.py --run-search --task-type regression --skip-preprocessing
 
 # Quick training with defaults (equivalent to --train)
 python main.py --run-search --use-defaults
@@ -143,9 +143,9 @@ python main.py --evaluate-only
 
 | Command | Description | Use Case |
 |---------|-------------|----------|
-| `--train` | Train models with default parameters | Quick prototyping, baseline results |
+| `--train-default` | Train models with default parameters | Quick prototyping, baseline results |
 | `--run-search` | Full hyperparameter optimization | Best performance, production models |
-| `--run-search --use-defaults` | Train with defaults (same as `--train`) | Legacy compatibility |
+| `--run-search --use-defaults` | Train with default hyperparameters instead of search (legacy `--train`) | Quick baselines |
 | `--evaluate-only` | Evaluate existing trained models | Testing, comparison |
 
 ### Common Filtering Options
@@ -160,13 +160,13 @@ python main.py --evaluate-only
 
 ```console
 # Simple: Train all models with defaults
-python main.py --train
+python main.py --train-default
 
 # Focused: Train only XGBoost models  
-python main.py --train --model-families xgboost_regression xgboost_classification
+python main.py --train-default --model-families xgboost_regression xgboost_classification
 
 # Fast: Reuse preprocessing from previous run
-python main.py --train --skip-preprocessing
+python main.py --train-default --skip-preprocessing
 
 # Advanced: Full hyperparameter search for specific models
 python main.py --run-search --model-families lightgbm_regression
@@ -189,7 +189,7 @@ python main.py --run-search --model-families lightgbm_regression
 - Train models with default parameters (no hyperparameter search)
 - 90% simpler than `--run-search --use-defaults`
 - Perfect for quick prototyping and baseline results
-- Example: `python main.py --train --model-families xgboost_regression`
+ - Example: `python main.py --train-default --model-families xgboost_regression`
 
 **Advanced Training (`--run-search`)**:
 - Full hyperparameter optimization using Optuna
@@ -315,25 +315,7 @@ The architecture makes it simple to add new models. Both hyperparameter search a
    }
    ```
 
-5. **Add Model Class Reference** in `config.py`
-   ```python
-   MODEL_FAMILIES = {
-       "my_new_model_regression": {
-           "type": "regression", 
-           "base_model": "my_new_model",
-           "class": MyNewModel  # Add class reference for dynamic instantiation
-       },
-       # ... other models
-   }
-   ```
 
-6. **Add to Hyperparameter Search** in `resource_prediction/training/hyperparameter.py`
-   ```python
-   # In the _objective method, add your family name:
-   elif family_name == 'my_new_model_regression':
-       model = MyNewModel(**params, random_state=self.config.RANDOM_STATE)
-       return self._evaluate_regression(model, X_trial, self.y_train_gb)
-   ```
 
 **That's it!** The system now uses dynamic model instantiation - no hardcoded model creation needed in evaluation!
 
@@ -358,20 +340,16 @@ The architecture makes it simple to add new models. Both hyperparameter search a
 
 ### Interactive Web Application
 
-The project includes a unified Streamlit web application for model exploration:
+The project includes a unified Streamlit web application under the `app/` folder for model exploration:
 
 ```console
-# Launch the main application (only one needed)
+# Launch the main application
 streamlit run app/app.py
 ```
 
-The application features:
-- **Model Selection**: Radio button interface to choose between 4 different models:
-  - Classification
-  - Quantile Ensemble (3 variants: Balanced, Tiny Under-allocation, Small Waste)
-- **Interactive Prediction**: Real-time memory prediction with simulation data
-- **Visualization**: Live charts showing prediction behavior over time
-- **Simulation Mode**: Automatic batch processing with configurable delay
-- **Model-Specific Interfaces**: Each model type has its own optimized interface
+The app structure includes:
+- `app/app.py`: main Streamlit entrypoint and sidebar model registry
+- `app/utils.py`: UI setup and simulation loop helpers
+- `app/data_loader.py`: simulation data loading utilities
 
-The app dynamically loads the appropriate model and configuration based on user selection, with helper modules in the subdirectories (`app/qe/`, `app/classification/`) providing model-specific functionality.
+Available models are defined in the `available_models` dict in `app/app.py`. To add a new model, include its display name and the path to its serialized .pkl file in that dict.
