@@ -1,3 +1,4 @@
 model_name,Extremely Over (3x-4x)_jobs,Massively Over (4x+)_jobs,Perfectly-allocated_jobs,Severely Over (2x-3x)_jobs,Under-allocated_jobs,Well-allocated (1x-2x)_jobs,total_jobs,Extremely Over (3x-4x)_perc,Massively Over (4x+)_perc,Perfectly-allocated_perc,Severely Over (2x-3x)_perc,Under-allocated_perc,Well-allocated (1x-2x)_perc,total_alloc_mem_gb,total_over_alloc_gb,total_true_mem_gb,total_under_alloc_gb
 Baseline,3223,4948,0,6728,916,6156,21971,14.67,22.52,0.00,30.62,4.17,28.02,4257083.00,2542162.35,1714920.65,0.00
-xgb_xgb_ensemble,1082,1138,0,3245,683,15823,21971,4.92,5.18,0.00,14.77,3.11,72.02,2529084.36,820554.96,1714920.65,6391.25
+xgb_xgb_max_ensemble,854,874,0,2839,688,16716,21971,3.89,3.98,0.00,12.92,3.13,76.08,2444741.75,736597.35,1714920.65,6776.18
+xgb_xgb_weighted_ensemble,829,869,0,2815,743,16715,21971,3.77,3.96,0.00,12.81,3.38,76.08,2432656.54,725130.91,1714920.65,7395.01
