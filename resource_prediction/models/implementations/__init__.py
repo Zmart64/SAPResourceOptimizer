@@ -5,12 +5,22 @@ framework/library (LightGBM, XGBoost, scikit-learn, etc.).
 """
 
 from .quantile_ensemble import QuantileEnsemblePredictor
+from .quantile_ensemble_variants import (
+    LGBXGBQuantileEnsemble,
+    GBLGBQuantileEnsemble, 
+    XGBCatQuantileEnsemble,
+    LGBCatQuantileEnsemble
+)
 from .xgboost_models import XGBoostRegressor, XGBoostClassifier
 from .lightgbm_models import LightGBMRegressor, LightGBMClassifier
 from .sklearn_models import RandomForestClassifier, LogisticRegression
 
 __all__ = [
     "QuantileEnsemblePredictor",
+    "LGBXGBQuantileEnsemble",
+    "GBLGBQuantileEnsemble", 
+    "XGBCatQuantileEnsemble",
+    "LGBCatQuantileEnsemble",
     "XGBoostRegressor", 
     "XGBoostClassifier",
     "LightGBMRegressor",

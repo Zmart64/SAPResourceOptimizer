@@ -24,7 +24,7 @@ from .training import OptunaOptimizer, Trainer
 __all__ = [
     "Config",
     "DataPreprocessor",
+    "QuantileEnsemblePredictor",
     "Trainer",
     "OptunaOptimizer",
-    "QuantileEnsemblePredictor",
 ]
