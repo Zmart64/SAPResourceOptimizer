@@ -144,14 +144,15 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
     df = pd.DataFrame(all_results)
 
     id_col = ['model_name']
-    # Include avg_pred_time and score_hold if they exist
+    # Include avg_pred_time, score_hold, and score_cv if they exist
     timing_col = ['avg_pred_time'] if 'avg_pred_time' in df.columns else []
     score_col = ['score_hold'] if 'score_hold' in df.columns else []
+    cv_col = ['score_cv'] if 'score_cv' in df.columns else []
     count_cols = sorted([c for c in df.columns if c.endswith('_jobs')])
     perc_cols = sorted([c for c in df.columns if c.endswith('_perc')])
     mem_cols = sorted([c for c in df.columns if c.endswith('_gb')])
 
-    df = df[id_col + timing_col + score_col + count_cols + perc_cols + mem_cols]
+    df = df[id_col + timing_col + score_col + cv_col + count_cols + perc_cols + mem_cols]
 
     for col in df.columns:
         if '_perc' in col or '_gb' in col:
@@ -167,12 +168,18 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
     max_name_width = max(len(row['model_name']) for _, row in df.iterrows())
     
     # Print header
-    header = f"{'Model':<{max_name_width}} | {'Holdout Score':<14} | {'Avg Pred Time (s)':<18}"
+    header = f"{'Model':<{max_name_width}} | {'CV Score':<10} | {'Holdout Score':<14} | {'Avg Pred Time (s)':<18}"
     print(header)
     print("-" * len(header))
     
     for _, row in df.iterrows():
         model_name = row['model_name']
+        
+        # Format CV score
+        if 'score_cv' in row and not pd.isna(row['score_cv']):
+            cv_score = f"{float(row['score_cv']):.4f}"
+        else:
+            cv_score = "N/A"
         
         # Format holdout score
         if 'score_hold' in row and not pd.isna(row['score_hold']):
@@ -187,4 +194,4 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
             avg_time = "N/A"
         
         # Print aligned row
-        print(f"{model_name:<{max_name_width}} | {holdout_score:<14} | {avg_time:<18}")
+        print(f"{model_name:<{max_name_width}} | {cv_score:<10} | {holdout_score:<14} | {avg_time:<18}")
