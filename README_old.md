@@ -178,7 +178,6 @@ python main.py --run-search --model-families lightgbm_regression
 - Quantile Ensemble (GradientBoosting + XGBoost)
 - XGBoost Regression
 - LightGBM Regression
-- Sizey Predictor
 
 **Classification Models** (predict memory bins):
 - XGBoost Classifier
@@ -195,96 +194,134 @@ The pipeline implements a business-focused optimization objective:
 This reflects that memory under-allocation (causing build failures) is 5x more 
 costly than over-allocation (wasting resources).
 
-### Model Types
+### Model Architecture
 
-**1. Core Infrastructure** (``resource_prediction/models/``)
-   - **BasePredictor**: Common interface for all prediction models
-   - **Concrete Models**: XGBoost, LightGBM, Random Forest, Logistic Regression, Quantile Ensemble
-   - **DeployableModel**: Production wrapper with integrated preprocessing
+The project uses a clean, consistent model architecture:
 
-**2. Training Layer** (``resource_prediction/training/``)
-   - **HyperparameterSearcher**: Optuna-based optimization with business metrics
-   - **Trainer**: Model evaluation, cross-validation, and champion selection
-   - **Business Scoring**: Domain-specific metrics (5:1 penalty for under-allocation)
+- **BasePredictor Interface**: All models implement consistent `fit()` and `predict()` methods
+- **DeployableModel Wrapper**: Production-ready wrapper with integrated preprocessing
+- **ModelPreprocessor**: Handles feature engineering automatically
+- **Unified Parameter Handling**: Both hyperparameter search and evaluation use the same wrapper models
 
-**3. Application Layer** (``app/``)
-   - **Streamlit Interface**: Interactive model comparison and simulation
-   - **Data Pipeline**: Automated preprocessing and feature engineering
-   - **Production Integration**: Direct model loading and prediction serving
+### Directory Structure
 
-**Key Benefits:**
+The models are organized for clarity and maintainability:
 
-- **Consistency**: All models implement the same interface via BasePredictor
-- **Flexibility**: Easy to swap models without changing application code  
-- **Production-Ready**: DeployableModel ensures models include all preprocessing
-- **Extensible**: Adding new models requires minimal code changes
-
-**Data Flow:**
-
-1. **Raw Data** → **ModelPreprocessor** → **Engineered Features**
-2. **Features** → **BasePredictor.fit()** → **Trained Model**
-3. **Trained Model** → **DeployableModel** → **Production Artifact**
-4. **New Data** → **DeployableModel.predict()** → **Memory Allocations**
-
-This architecture ensures that models are interchangeable, preprocessing is consistent, and the system remains maintainable as new model types are added.
-
-**Customizing Business Logic**
-
-The business scoring function can be modified in the ``Trainer`` class:
-
-- Adjust the 5:1 penalty ratio for under vs over-allocation
-- Add new metrics (e.g., SLA compliance, cost thresholds)
-- Implement domain-specific constraints
-
-## Example Workflows
-
-**Complete Pipeline Run**
-
-```console
-# Full pipeline: preprocessing + hyperparameter search + evaluation
-python main.py --run-search
+```
+resource_prediction/models/
+├── __init__.py              # Public API exports
+├── base.py                  # BasePredictor interface
+├── unified_wrapper.py       # DeployableModel for production
+└── implementations/         # Specific model implementations
+    ├── lightgbm_models.py
+    ├── quantile_ensemble.py
+    ├── sklearn_models.py
+    └── xgboost_models.py
 ```
 
-**Development Workflow**
+**Design Principles:**
+- **Separation of Concerns**: Infrastructure files (`base.py`, `unified_wrapper.py`) are separated from specific implementations
+- **Clear Organization**: All concrete model implementations are grouped in the `implementations/` directory
+- **Simple Imports**: Users import from `resource_prediction.models` regardless of internal structure
+- **Easy Extension**: New models go in `implementations/` with import added to main `__init__.py`
+
+## How to Extend
+
+### Adding New Models
+
+The system uses a simplified model registration approach that requires only 3 steps to add new models. The dynamic import and instantiation system automatically handles model creation without requiring hardcoded logic.
+
+**Step-by-Step Guide:**
+
+1. **Create Model Class** in `resource_prediction/models/implementations/`
+   ```python
+   from ..base import BasePredictor
+   import pandas as pd
+   import numpy as np
+   
+   class MyNewModel(BasePredictor):
+       def __init__(self, param1: int = 100, param2: float = 0.1, random_state: int = 42, **kwargs):
+           self.param1 = param1
+           self.param2 = param2
+           self.random_state = random_state
+           # Your model initialization here
+           
+       def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+           # Implement training logic
+           pass
+           
+       def predict(self, X: pd.DataFrame) -> np.ndarray:
+           # Implement prediction logic
+           pass
+   ```
+
+2. **Register in MODEL_FAMILIES** in `resource_prediction/config.py`
+   ```python
+   MODEL_FAMILIES = {
+       "my_new_model_regression": {
+           "type": "regression", 
+           "base_model": "my_new_model",
+           "class": _import_model_class("resource_prediction.models", "MyNewModel"),
+       },
+       # ... other models
+   }
+   ```
+
+3. **Define Hyperparameter Configuration** in `config.py`
+   ```python
+   HYPERPARAMETER_CONFIGS = {
+       "my_new_model_regression": {
+           "use_quant_feats": {"choices": [True, False], "default": True},
+           "param1": {"min": 50, "max": 200, "type": "int", "default": 100},
+           "param2": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+           # Only include parameters your model actually uses!
+       }
+   }
+   ```
+
+**That's it!** The dynamic import and instantiation system automatically handles the rest:
+
+- ✅ **No manual imports needed** - Dynamic imports handle model loading automatically
+- ✅ **No hardcoded logic** - Models are instantiated dynamically from MODEL_FAMILIES
+- ✅ **Automatic registration** - Hyperparameter search discovers models automatically
+- ✅ **Clean separation** - Each model only defines its own parameters
+
+**Key Benefits of This Architecture:**
+- ✅ **Simplified workflow** - Only 3 steps required to add new models
+- ✅ **No parameter filtering** - Models accept parameters directly from hyperparameter search
+- ✅ **Consistent interface** - Same model class used in search and evaluation  
+- ✅ **Clean implementation** - Models handle their own parameter validation
+- ✅ **Dynamic instantiation** - Evaluation uses `metadata['class']` for automatic model creation
+- ✅ **No hardcoded logic** - Adding models doesn't require updating evaluation code
+
+**Model-Specific Parameters**: Only include parameters that your specific model actually uses:
+- Classification models automatically get `n_bins`, `strategy` from the classification config
+- Regression models only need parameters relevant to their algorithm
+- No need to handle `alpha` unless your model does quantile prediction
+- Use `**kwargs` in your `__init__` to gracefully handle unexpected parameters
+
+### Customizing Business Logic
+
+- Modify the business scoring function in `Trainer` class
+- Adjust the 5:1 penalty ratio for under vs over-allocation  
+- Add new metrics (SLA compliance, cost thresholds, etc.)
+
+### Interactive Web Application
+
+The project includes a unified Streamlit web application for model exploration:
 
 ```console
-# 1. Initial data preprocessing
-python main.py --preprocess-only
-
-# 2. Quick classification experiment
-python main.py --train --task-type classification
-
-# 3. Full optimization for regression  
-python main.py --run-search --task-type regression --skip-preprocessing
-
-# 4. Compare all models
-python main.py --evaluate-only --evaluate-all-archs
-```
-
-**Production Workflow**
-
-```console
-# 1. Train production models with hyperparameter search
-python main.py --run-search --save-models
-
-# 2. Evaluate and compare saved models
-python main.py --evaluate-only
-
-# 3. Launch interactive application
+# Launch the main application (only one needed)
 streamlit run app/app.py
 ```
 
-## Interactive Web Applications
-
-Launch the unified Streamlit application for model exploration:
-
-```console
-streamlit run app/app.py
-```
-
-**Application Features:**
-- **Model Selection**: Choose between different trained models
+The application features:
+- **Model Selection**: Radio button interface to choose between 4 different models:
+  - Classification
+  - Quantile Ensemble (3 variants: Balanced, Tiny Under-allocation, Small Waste)
 - **Interactive Prediction**: Real-time memory prediction with simulation data
 - **Visualization**: Live charts showing prediction behavior over time
-- **Model Comparison**: Compare performance across different model types
-- **Production Interface**: Direct integration with DeployableModel artifacts
+- **Simulation Mode**: Automatic batch processing with configurable delay
+- **Model-Specific Interfaces**: Each model type has its own optimized interface
+
+The app dynamically loads the appropriate model and configuration based on user selection, with helper modules in the subdirectories (`app/qe/`, `app/classification/`) providing model-specific functionality.
