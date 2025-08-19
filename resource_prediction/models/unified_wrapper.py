@@ -75,42 +75,34 @@ class DeployableModel(BasePredictor):
 
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
+    def predict(
+        self, X: pd.DataFrame, confidence_threshold: Optional[float] = None
+    ) -> np.ndarray:
         """
-        Predicts the memory allocation for the given input data.
-
-        For classification models, if the model's confidence is below a
-        tuned threshold, it predicts the next higher class.
+        Predict memory allocation (regression) or bin-based allocation (classification).
 
         Args:
-            X (pd.DataFrame): The input data.
+            X: Raw (unprocessed) input dataframe.
+            confidence_threshold: Optional override for classification safety bump logic.
+                If provided, this value supersedes any stored model.confidence_threshold.
+                If not provided, will try to use self.model.confidence_threshold, else defaults to 0.6.
 
         Returns:
-            np.ndarray: The predicted memory allocations or classes.
+            np.ndarray: Predicted allocations (GB) for regression or adjusted class indices / allocations for classification.
         """
         # Preprocess the raw input data
         X_processed = self.preprocessor.transform(X)
 
         if self.task_type == "classification":
-            # Classification model with one-up logic
-            probabilities = self.model.predict_proba(X_processed)
-            predictions = np.argmax(probabilities, axis=1)
-            confidences = np.max(probabilities, axis=1)
-
-            # The confidence_threshold is mandatory and must be set on the model
-            threshold = self.model.confidence_threshold
-
-            low_confidence_indices = np.where(confidences < threshold)[0]
-
-            if len(low_confidence_indices) > 0:
-                max_class = len(self.model.classes_) - 1
-                predictions[low_confidence_indices] = np.minimum(
-                    predictions[low_confidence_indices] + 1, max_class
-                )
-
-            return predictions
+            # The underlying classification models have the confidence logic in their predict methods.
+            # We just need to pass the threshold down.
+            if confidence_threshold is not None:
+                return self.model.predict(X_processed, confidence_threshold=confidence_threshold)
+            else:
+                # Use the model's own default if it has one
+                return self.model.predict(X_processed)
         else:
-            # Regression model
+            # Regression models don't have/need a confidence threshold
             return self.model.predict(X_processed)
 
     def get_model_info(self) -> Dict[str, Any]:
