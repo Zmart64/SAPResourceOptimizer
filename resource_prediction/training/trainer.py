@@ -43,11 +43,11 @@ class Trainer:
     Orchestrates the ML pipeline: search, final evaluation, and reporting.
     """
 
-    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None, 
+    def __init__(self, config: Config, evaluate_all_archs: bool = False, task_type_filter: str | None = None,
                  save_models: bool = False, model_families: list[str] | None = None, use_defaults: bool = False):
         """
         Initializes the Trainer and loads data splits and baseline statistics.
-        
+
         Args:
             config: Configuration object
             evaluate_all_archs: Whether to evaluate all architectures
@@ -133,57 +133,56 @@ class Trainer:
         Returns mock studies that can be used with the existing evaluation pipeline.
         """
         studies = []
-        
+
         # Get the model families to train
         families_to_train = self.config.MODEL_FAMILIES.items()
         if self.model_families:
-            families_to_train = [(name, metadata) for name, metadata in families_to_train 
-                                if name in self.model_families]
-        
+            families_to_train = [(name, metadata) for name, metadata in families_to_train
+                                 if name in self.model_families]
+
         for family_name, metadata in families_to_train:
             if self.task_type_filter and metadata['type'] != self.task_type_filter:
                 continue
-                
+
             print(f"Training {family_name} with default parameters...")
-            
+
             # Get default parameters for the family
             default_params = self.config.get_defaults(family_name)
-            
             # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
             from resource_prediction.training.hyperparameter import OptunaOptimizer
-            optimizer = OptunaOptimizer(self.config, self.X_train, self.y_train)
-            
+            optimizer = OptunaOptimizer(
+                self.config, self.X_train, self.y_train)
+
             # Create a mock trial with default parameters
             class DefaultTrial:
                 def __init__(self, params):
                     self.params = params
-                    
+
                 def suggest_categorical(self, name, choices):
                     return self.params.get(name, choices[0])
-                    
+
                 def suggest_int(self, name, low, high):
                     return self.params.get(name, (low + high) // 2)
-                    
+
                 def suggest_float(self, name, low, high, log=False):
                     return self.params.get(name, (low + high) / 2)
-            
+
             trial = DefaultTrial(default_params)
-            
+
             # Evaluate the model
             try:
                 score = optimizer._objective(trial, family_name)
-                
                 # Create a mock study for compatibility with existing evaluation code
                 mock_trial = MockTrial(default_params, score)
                 mock_study = MockStudy(family_name, mock_trial)
                 studies.append(mock_study)
-                
+
                 print(f"  {family_name}: CV Score = {score:.4f}")
-                
+
             except Exception as e:
                 print(f"  Error training {family_name}: {e}")
                 continue
-        
+
         return studies
 
     def run_evaluation_from_files(self):
@@ -214,14 +213,15 @@ class Trainer:
         for _, row in all_results_df.iterrows():
             family_name = row['model']
             cv_score = row['score_cv']
-            
+
             # Use clean configuration system: only get parameters this model family needs
             try:
                 # Start with default parameters for this family
                 clean_params = self.config.get_defaults(family_name)
-                
+
                 # Override defaults with values from CSV where available
-                family_config = self.config.HYPERPARAMETER_CONFIGS.get(family_name, {})
+                family_config = self.config.HYPERPARAMETER_CONFIGS.get(
+                    family_name, {})
                 for param_name in family_config.keys():
                     if param_name in row and not pd.isna(row[param_name]):
                         value = row[param_name]
@@ -231,12 +231,13 @@ class Trainer:
                         elif str(value).lower() in ['true', 'false']:
                             value = str(value).lower() == 'true'
                         clean_params[param_name] = value
-                
+
                 mock_studies.append(
                     MockStudy(family_name, MockTrial(clean_params, cv_score)))
-                    
+
             except Exception as e:
-                print(f"Warning: Could not load parameters for {family_name}: {e}")
+                print(
+                    f"Warning: Could not load parameters for {family_name}: {e}")
                 continue
 
         self._evaluate_and_report(
@@ -285,13 +286,27 @@ class Trainer:
 
         # Get feature selection
         use_quant = best_params.pop("use_quant_feats", True)
-        base_features = config.BASE_FEATURES + (config.QUANT_FEATURES if use_quant else [])
+        base_features = config.BASE_FEATURES + \
+            (config.QUANT_FEATURES if use_quant else [])
         X_train_fs, X_test_fs = X_train[base_features], X_test[base_features]
         y_train_gb, y_test_gb = y_train[config.TARGET_COLUMN_PROCESSED], y_test[config.TARGET_COLUMN_PROCESSED]
 
         # Create the model dynamically using the same system as hyperparameter search
         model_class = metadata['class']
+
+        confidence_threshold = None
+        if task_type == 'classification':
+            # For classification, threshold is mandatory
+            confidence_threshold = best_params.pop('confidence_threshold')
+        else:
+            # For regression, it might be present from a mixed run, so pop it safely
+            best_params.pop('confidence_threshold', None)
+
         model = model_class(**best_params, random_state=config.RANDOM_STATE)
+
+        # Set the threshold on the model instance if it's a classification model
+        if task_type == 'classification':
+            model.confidence_threshold = confidence_threshold
 
         # Fit and predict using the clean BasePredictor interface
         model.fit(X_train_fs, y_train_gb)
@@ -300,16 +315,17 @@ class Trainer:
         # Handle saving the model
         if save_model:
             os.makedirs(config.MODELS_DIR, exist_ok=True)
-            
+
             # For models that need feature encoding, get the encoded features
             if hasattr(model, 'columns') and model.columns is not None:
                 features = model.columns
             else:
                 features = base_features
-            
+
             # Create and fit preprocessing pipeline
             preprocessor = ModelPreprocessor(
-                categorical_features=['location', 'component', 'makeType', 'bp_arch', 'bp_compiler', 'bp_opt'],
+                categorical_features=['location', 'component',
+                                      'makeType', 'bp_arch', 'bp_compiler', 'bp_opt'],
                 expected_features=features
             )
             # Fit preprocessor on encoded data for consistency
@@ -318,7 +334,7 @@ class Trainer:
                 preprocessor.fit(X_train_encoded)
             else:
                 preprocessor.fit(X_train_fs)
-            
+
             # Create deployable model wrapper
             deployable_model = DeployableModel(
                 model=model,
@@ -332,10 +348,10 @@ class Trainer:
                     'training_timestamp': str(pd.Timestamp.now())
                 }
             )
-            
+
             # Save deployable model
             deployable_model.save(config.MODELS_DIR / f"{family_name}.pkl")
-            
+
             print(f"Saved deployable model artifact for '{family_name}'")
 
         # Calculate metrics
@@ -343,8 +359,14 @@ class Trainer:
             name=family_name, allocations=alloc, true_values=y_test_gb.values)
         hold_metrics = Trainer._allocation_metrics(alloc, y_test_gb.values)
         hold_metrics["score"] = Trainer._business_score(hold_metrics)
+
+        # Ensure the confidence_threshold is included in the results for classification
+        final_params = study.best_trial.params.copy()
+        if task_type == 'classification':
+            final_params['confidence_threshold'] = confidence_threshold
+
         result_row = {'model': family_name, 'score_cv': study.best_value, **
-                      study.best_trial.params, **{f"{k}_hold": v for k, v in hold_metrics.items()}}
+                      final_params, **{f"{k}_hold": v for k, v in hold_metrics.items()}}
 
         return task_type, result_row, model_alloc_stats
 
@@ -361,7 +383,7 @@ class Trainer:
                 # ValueError: raised when no trials are complete
                 # AttributeError: raised when best_trial doesn't exist
                 return False
-        
+
         valid_studies = [s for s in studies if _has_valid_best_trial(s)]
         if not valid_studies:
             print("\nNo successful models found to evaluate.")

@@ -69,11 +69,11 @@ make dev
 ```
 
 **Benefits of DeployableModel Architecture:**
-- 🔄 **Unified Interface** - All models implement `BasePredictor` for consistency
-- 🧠 **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
-- 🏗️ **Production Ready** - Complete serialization with metadata and preprocessing pipeline
-- 📦 **Extensible Design** - Easy to add new models following the same pattern
-- ✨ **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
+-  **Unified Interface** - All models implement `BasePredictor` for consistency
+-  **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
+-  **Production Ready** - Complete serialization with metadata and preprocessing pipeline
+-  **Extensible Design** - Easy to add new models following the same pattern
+-  **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
 
 ### Documentation
 
@@ -317,6 +317,7 @@ The system uses a simplified model registration approach that requires only 3 st
 - ✅ **Consistent interface** - Same model class used in search and evaluation  
 - ✅ **Clean implementation** - Models handle their own parameter validation
 - ✅ **Dynamic instantiation** - Evaluation uses `metadata['class']` for automatic model creation
+- ✅ **No hardcoded logic** - Adding models doesn't require updating evaluation code
 
 **Model-Specific Parameters**: Only include parameters that your specific model actually uses:
 - Classification models automatically get `n_bins`, `strategy` from the classification config
