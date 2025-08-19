@@ -56,7 +56,7 @@ class Config:
 
     TARGET_COLUMN_RAW = "max_rss"
     TARGET_COLUMN_PROCESSED = "max_rss_gb"
-    TEST_SET_FRACTION = 0.20
+    TEST_SET_FRACTION = 0.10
     RANDOM_STATE = 42
 
     BASE_FEATURES = [
@@ -91,8 +91,8 @@ class Config:
     ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
 
     CV_SPLITS = 3
-    N_CALLS_PER_FAMILY = 51  # Use Zmart's optimized value
-    NUM_PARALLEL_WORKERS = 32  # Use Zmart's optimized value
+    N_CALLS_PER_FAMILY = 51 
+    NUM_PARALLEL_WORKERS = 32 
 
     MODEL_FAMILIES = {
         "qe_regression": {
