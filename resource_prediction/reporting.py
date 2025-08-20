@@ -143,8 +143,32 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
     """
     df = pd.DataFrame(all_results)
 
+    # Try to merge regression/classification results for metrics
+    import os
+    from .config import Config
+    reg_path = Config.REGRESSION_RESULTS_CSV_PATH
+    class_path = Config.CLASSIFICATION_RESULTS_CSV_PATH
+    reg_df = None
+    class_df = None
+    if os.path.exists(reg_path):
+        reg_df = pd.read_csv(reg_path)
+        # Rename 'model' to 'model_name' for join
+        if 'model' in reg_df.columns:
+            reg_df = reg_df.rename(columns={'model': 'model_name'})
+    if os.path.exists(class_path):
+        class_df = pd.read_csv(class_path)
+        if 'model' in class_df.columns:
+            class_df = class_df.rename(columns={'model': 'model_name'})
+
+    # Merge metrics into allocation summary
+    metrics_cols = ['score_cv', 'score_hold', 'avg_pred_time']
+    for metrics_df in [reg_df, class_df]:
+        if metrics_df is not None:
+            # Only bring in relevant columns
+            merge_cols = ['model_name'] + [c for c in metrics_cols if c in metrics_df.columns]
+            df = df.merge(metrics_df[merge_cols], on='model_name', how='left', suffixes=('', '_metrics'))
+
     id_col = ['model_name']
-    # Include avg_pred_time, score_hold, and score_cv if they exist
     timing_col = ['avg_pred_time'] if 'avg_pred_time' in df.columns else []
     score_col = ['score_hold'] if 'score_hold' in df.columns else []
     cv_col = ['score_cv'] if 'score_cv' in df.columns else []
@@ -160,38 +184,45 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
 
     df.to_csv(output_path, index=False)
     print(f"Unified allocation summary report saved to {output_path}")
-    
+
     # Print summary of results including prediction times and holdout scores if available
     print("\nModel Performance Summary:")
-    
+
+    # Filter out baseline entries for the table display
+    model_rows = df[df['model_name'] != 'Baseline']
+
+    if model_rows.empty:
+        print("No model results to display.")
+        return
+
     # Calculate max widths for alignment
-    max_name_width = max(len(row['model_name']) for _, row in df.iterrows())
-    
+    max_name_width = max(len(row['model_name']) for _, row in model_rows.iterrows())
+
     # Print header
     header = f"{'Model':<{max_name_width}} | {'CV Score':<10} | {'Holdout Score':<14} | {'Avg Pred Time (s)':<18}"
     print(header)
     print("-" * len(header))
-    
-    for _, row in df.iterrows():
+
+    for _, row in model_rows.iterrows():
         model_name = row['model_name']
-        
+
         # Format CV score
         if 'score_cv' in row and not pd.isna(row['score_cv']):
             cv_score = f"{float(row['score_cv']):.4f}"
         else:
             cv_score = "N/A"
-        
+
         # Format holdout score
         if 'score_hold' in row and not pd.isna(row['score_hold']):
             holdout_score = f"{float(row['score_hold']):.4f}"
         else:
             holdout_score = "N/A"
-        
+
         # Format prediction time
         if 'avg_pred_time' in row and not pd.isna(row['avg_pred_time']):
             avg_time = f"{float(row['avg_pred_time']):.6f}"
         else:
             avg_time = "N/A"
-        
+
         # Print aligned row
         print(f"{model_name:<{max_name_width}} | {cv_score:<10} | {holdout_score:<14} | {avg_time:<18}")
