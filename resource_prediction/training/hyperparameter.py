@@ -46,12 +46,12 @@ class OptunaOptimizer:
             "total_over_pct": 100 * over.sum() / true.sum() if true.sum() > 0 else 0,
         }
 
-    def _evaluate_regression(self, model, X, y):
-        """Evaluates a regression model using time-series cross-validation."""
+    def _evaluate_regression(self, model, X, y, trial=None):
+        """Evaluates a regression model using time-series cross-validation, with optional pruning."""
         tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
 
-        for tr_idx, te_idx in tscv.split(X):
+        for fold_idx, (tr_idx, te_idx) in enumerate(tscv.split(X)):
             X_train_fold, X_test_fold = X.iloc[tr_idx], X.iloc[te_idx]
             y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
 
@@ -60,15 +60,22 @@ class OptunaOptimizer:
             allocs.extend(model.predict(X_test_fold))
             truths.extend(y_test_fold)
 
-        metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
-        return self._business_score(metrics)
+            if trial is not None and hasattr(trial, "report") and hasattr(trial, "should_prune"):
+                metrics_partial = self._allocation_metrics(np.array(allocs), np.array(truths))
+                score_partial = self._business_score(metrics_partial)
+                trial.report(score_partial, step=fold_idx)
+                if trial.should_prune():
+                    raise optuna.exceptions.TrialPruned()
 
-    def _evaluate_classification(self, model, X, y):
-        """Evaluates a classification model using time-series cross-validation."""
+        metrics_final = self._allocation_metrics(np.array(allocs), np.array(truths))
+        return self._business_score(metrics_final)
+
+    def _evaluate_classification(self, model, X, y, trial=None):
+        """Evaluates a classification model using time-series cross-validation, with optional pruning."""
         tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
 
-        for tr_idx, te_idx in tscv.split(X):
+        for fold_idx, (tr_idx, te_idx) in enumerate(tscv.split(X)):
             X_train_fold, X_test_fold = X.iloc[tr_idx], X.iloc[te_idx]
             y_train_fold, y_test_fold = y.iloc[tr_idx], y.iloc[te_idx]
 
@@ -79,8 +86,15 @@ class OptunaOptimizer:
             allocs.extend(pred_allocs)
             truths.extend(y_test_fold)
 
-        metrics = self._allocation_metrics(np.array(allocs), np.array(truths))
-        return self._business_score(metrics)
+            if trial is not None and hasattr(trial, "report") and hasattr(trial, "should_prune"):
+                metrics_partial = self._allocation_metrics(np.array(allocs), np.array(truths))
+                score_partial = self._business_score(metrics_partial)
+                trial.report(score_partial, step=fold_idx)
+                if trial.should_prune():
+                    raise optuna.exceptions.TrialPruned()
+
+        metrics_final = self._allocation_metrics(np.array(allocs), np.array(truths))
+        return self._business_score(metrics_final)
 
     def _objective(self, trial, family_name):
         """The core objective function for Optuna to minimize."""
@@ -100,9 +114,9 @@ class OptunaOptimizer:
         # Set the threshold on the model instance if it's a classification model
         if task_type == "classification":
             model.confidence_threshold = confidence_threshold
-            return self._evaluate_classification(model, X_trial, self.y_train_gb)
+            return self._evaluate_classification(model, X_trial, self.y_train_gb, trial)
         else:
-            return self._evaluate_regression(model, X_trial, self.y_train_gb)
+            return self._evaluate_regression(model, X_trial, self.y_train_gb, trial)
 
     def run(self):
         """
@@ -154,11 +168,18 @@ class OptunaOptimizer:
                 print(
                     f"Loading or creating new study '{study_name}' for model family '{family_name}'."
                 )
+                sampler = optuna.samplers.TPESampler(
+                    seed=self.config.RANDOM_STATE,
+                    constant_liar=True,
+                    n_startup_trials=max(10, 2 * self.config.NUM_PARALLEL_WORKERS),
+                    n_ei_candidates=64,
+                    multivariate=True,
+                )
                 study = optuna.create_study(
                     study_name=study_name,
                     storage=storage_url,
                     direction="minimize",
-                    sampler=optuna.samplers.TPESampler(seed=self.config.RANDOM_STATE),
+                    sampler=sampler,
                     load_if_exists=True,
                 )
 
