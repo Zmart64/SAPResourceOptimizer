@@ -47,8 +47,7 @@ def main(args):
     # Define experimental QE ensemble models (exclude the base qe_regression)
     experimental_qe_ensembles = [
         'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
-        'xgb_xgb_max_ensemble', 'xgb_xgb_weighted_ensemble',
-        'xgb_xgb_confidence_ensemble', 'xgb_xgb_adaptive_safety_ensemble', 'xgb_xgb_selective_ensemble'
+        'xgb_xgb_ensemble', 'xgb_xgb_standard_ensemble'
     ]
     all_qe_models = ['qe_regression'] + experimental_qe_ensembles
 

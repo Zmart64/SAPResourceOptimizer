@@ -4,10 +4,10 @@ This module contains all the concrete model implementations organized by
 framework/library (LightGBM, XGBoost, scikit-learn, etc.).
 """
 
-from .quantile_ensemble import QuantileEnsemblePredictor
 from .quantile_ensemble_variants import (
+    GBXGBQuantileEnsemble,
     LGBXGBQuantileEnsemble,
-    GBLGBQuantileEnsemble, 
+    GBLGBQuantileEnsemble,
     XGBCatQuantileEnsemble,
     LGBCatQuantileEnsemble
 )
@@ -16,15 +16,15 @@ from .lightgbm_models import LightGBMRegressor, LightGBMClassifier
 from .sklearn_models import RandomForestClassifier, LogisticRegression
 
 __all__ = [
-    "QuantileEnsemblePredictor",
+    "GBXGBQuantileEnsemble",
     "LGBXGBQuantileEnsemble",
-    "GBLGBQuantileEnsemble", 
+    "GBLGBQuantileEnsemble",
     "XGBCatQuantileEnsemble",
     "LGBCatQuantileEnsemble",
-    "XGBoostRegressor", 
+    "XGBoostRegressor",
     "XGBoostClassifier",
     "LightGBMRegressor",
-    "LightGBMClassifier", 
+    "LightGBMClassifier",
     "RandomForestClassifier",
     "LogisticRegression"
 ]

@@ -7,18 +7,14 @@ interface for consistency across training and application layers.
 
 from .base import BasePredictor
 from .implementations.lightgbm_models import LightGBMClassifier, LightGBMRegressor
-from .implementations.quantile_ensemble import QuantileEnsemblePredictor
 from .implementations.quantile_ensemble_variants import (
+    GBXGBQuantileEnsemble,
     LGBXGBQuantileEnsemble,
     GBLGBQuantileEnsemble,
     XGBCatQuantileEnsemble,
     LGBCatQuantileEnsemble,
     XGBXGBQuantileEnsemble,
-    XGBXGBMaxQuantileEnsemble,
-    XGBXGBWeightedQuantileEnsemble,
-    XGBXGBConfidenceEnsemble,
-    XGBXGBAdaptiveSafetyEnsemble,
-    XGBXGBSelectiveEnsemble
+    XGBXGBStandardQuantileEnsemble,
 )
 from .implementations.sizey.sizey import SizeyPredictor
 from .implementations.sklearn_models import LogisticRegression, RandomForestClassifier
@@ -27,17 +23,13 @@ from .unified_wrapper import DeployableModel, load_model
 
 __all__ = [
     "BasePredictor",
-    "QuantileEnsemblePredictor",
+    "GBXGBQuantileEnsemble",
     "LGBXGBQuantileEnsemble",
     "GBLGBQuantileEnsemble",
     "XGBCatQuantileEnsemble",
     "LGBCatQuantileEnsemble",
     "XGBXGBQuantileEnsemble",
-    "XGBXGBMaxQuantileEnsemble",
-    "XGBXGBWeightedQuantileEnsemble",
-    "XGBXGBConfidenceEnsemble",
-    "XGBXGBAdaptiveSafetyEnsemble",
-    "XGBXGBSelectiveEnsemble",
+    "XGBXGBStandardQuantileEnsemble",
     "XGBoostRegressor",
     "XGBoostClassifier",
     "LightGBMRegressor",
