@@ -15,6 +15,12 @@ for var in ["OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEX
 
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=FutureWarning)
+# Suppress Optuna ExperimentalWarning for multivariate/constant_liar sampler options
+try:
+    from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
+    warnings.filterwarnings('ignore', category=_OptunaExperimentalWarning)
+except Exception:
+    pass
 
 
 def main(args):
@@ -44,12 +50,12 @@ def main(args):
     # Handle --run-all-qe-models flag
     model_families = args.model_families
 
-    # Define experimental QE ensemble models (exclude the base qe_regression)
+    # Define experimental QE ensemble models (exclude the standard gb_xgb_ensemble)
     experimental_qe_ensembles = [
-        'gb_xgb_ensemble', 'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+        'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
         'xgb_xgb_ensemble', 'xgb_xgb_standard_ensemble'
     ]
-    all_qe_models = ['qe_regression'] + experimental_qe_ensembles
+    all_qe_models = ['gb_xgb_ensemble'] + experimental_qe_ensembles
 
     if args.run_all_qe_models:
         # When flag is set:
@@ -61,7 +67,7 @@ def main(args):
             model_families = list(sorted(set(Config.MODEL_FAMILIES.keys()).union(all_qe_models)))
     else:
         # Default behavior without the flag:
-        # If user did not specify families: run all except experimental QE ensembles (keep qe_regression)
+        # If user did not specify families: run all except experimental QE ensembles (keep gb_xgb_ensemble)
         if model_families is None:
             all_models = list(Config.MODEL_FAMILIES.keys())
             model_families = [m for m in all_models if m not in experimental_qe_ensembles]
@@ -157,7 +163,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--run-all-qe-models",
         action="store_true",
-        help="Run all experimental quantile ensemble models in addition to the original qe_regression model.\nBy default, only qe_regression is run. Can be combined with --model-families."
+        help="Run all experimental quantile ensemble models in addition to the standard gb_xgb_ensemble model.\nBy default, only gb_xgb_ensemble is run. Can be combined with --model-families."
     )
 
     args = parser.parse_args()

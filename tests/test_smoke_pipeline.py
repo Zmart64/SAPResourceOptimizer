@@ -146,10 +146,10 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
 
         # Mirror main.py's experimental QE ensembles list for accurate reporting
         experimental_qe_ensembles = [
-            'gb_xgb_ensemble', 'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+            'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
             'xgb_xgb_ensemble', 'xgb_xgb_standard_ensemble'
         ]
-        all_qe_models = ['qe_regression'] + experimental_qe_ensembles
+        all_qe_models = ['gb_xgb_ensemble'] + experimental_qe_ensembles
 
         # Effective models that main() will run given our args
         if include_all_qe_models:

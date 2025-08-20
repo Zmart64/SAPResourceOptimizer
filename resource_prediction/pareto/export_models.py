@@ -6,7 +6,7 @@ import joblib
 import pandas as pd
 
 from resource_prediction.config import Config
-from resource_prediction.models.implementations.quantile_ensemble import QuantileEnsemblePredictor
+from resource_prediction.models.implementations.quantile_ensemble_variants import GBXGBQuantileEnsemble
 from resource_prediction.models import DeployableModel
 from resource_prediction.preprocessing import ModelPreprocessor
 
@@ -18,7 +18,7 @@ def save_models(key_points: dict, config: Config) -> dict:
     models_subfolder.mkdir(parents=True, exist_ok=True)
 
     # Load base trained model
-    base_path = config.MODELS_DIR / "qe_regression.pkl"
+    base_path = config.MODELS_DIR / "gb_xgb_ensemble.pkl"
     try:
         base_deployable = joblib.load(base_path)
         if isinstance(base_deployable, DeployableModel):
@@ -50,7 +50,7 @@ def save_models(key_points: dict, config: Config) -> dict:
     for name, color in specs:
         point = key_points[name]
         # build new predictor
-        predictor = QuantileEnsemblePredictor(
+        predictor = GBXGBQuantileEnsemble(
             alpha=point['alpha'],
             safety=point['safety'],
             gb_params={k: v for k, v in gb_params.items() if k not in ['alpha','random_state']},
@@ -72,7 +72,7 @@ def save_models(key_points: dict, config: Config) -> dict:
         # wrap
         deploy = DeployableModel(
             model=predictor,
-            model_type='quantile_ensemble',
+            model_type='gb_xgb_ensemble',
             task_type='regression',
             preprocessor=preprocessor,
             bin_edges=None,
