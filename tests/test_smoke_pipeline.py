@@ -195,6 +195,8 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
         assert not cls_df.empty, "classification_results.csv is empty"
         assert "model" in reg_df.columns and "score_cv" in reg_df.columns, "Expected columns missing in regression results"
         assert "model" in cls_df.columns and "score_cv" in cls_df.columns, "Expected columns missing in classification results"
+        # Classification runs should include tuned confidence_threshold in final params
+        assert "confidence_threshold" in cls_df.columns, "classification results must include confidence_threshold"
 
         # Reporting artifacts should exist because preprocessing creates baseline stats
         assert Config.ALLOCATION_SUMMARY_REPORT_PATH.exists(), "Missing allocation summary report"

@@ -95,12 +95,10 @@ class DeployableModel(BasePredictor):
 
         if self.task_type == "classification":
             # The underlying classification models have the confidence logic in their predict methods.
-            # We just need to pass the threshold down.
-            if confidence_threshold is not None:
-                return self.model.predict(X_processed, confidence_threshold=confidence_threshold)
-            else:
-                # Use the model's own default if it has one
-                return self.model.predict(X_processed)
+            # Pass an explicit threshold if provided; otherwise fall back to model's stored threshold or a safe default.
+            if confidence_threshold is None:
+                confidence_threshold = getattr(self.model, "confidence_threshold", 0.6)
+            return self.model.predict(X_processed, confidence_threshold=confidence_threshold)
         else:
             # Regression models don't have/need a confidence threshold
             return self.model.predict(X_processed)

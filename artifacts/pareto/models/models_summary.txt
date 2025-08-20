@@ -1,38 +1,5 @@
 Pareto Frontier Model Configurations
 ==================================================
-
-Three key model configurations exported from Pareto frontier analysis:
-
-Low Waste:
-  File: qe_low_waste.pkl
-  Alpha: 0.900
-  Safety: 1.000
-  Waste: 29.82%
-  Underallocation: 12.97%
-  Business Score: 94.65
-  Description: Low Waste configuration from Pareto frontier analysis
-
-Low Underallocation:
-  File: qe_low_underallocation.pkl
-  Alpha: 0.990
-  Safety: 1.140
-  Waste: 61.15%
-  Underallocation: 0.73%
-  Business Score: 64.82
-  Description: Low Underallocation configuration from Pareto frontier analysis
-
-Balanced:
-  File: qe_balanced.pkl
-  Alpha: 0.980
-  Safety: 1.040
-  Waste: 45.75%
-  Underallocation: 2.55%
-  Business Score: 58.52
-  Description: Balanced configuration from Pareto frontier analysis
-
-Usage:
-  import joblib
-  model_data = joblib.load('path/to/model.pkl')
-  model = model_data['model']
-  features = model_data['features']
-  config = model_data['config']
+low_waste: file=qe_low_waste.pkl, alpha=0.900, safety=1.000
+low_underallocation: file=qe_low_underallocation.pkl, alpha=0.990, safety=1.140
+balanced: file=qe_balanced.pkl, alpha=0.980, safety=1.040

@@ -141,6 +141,8 @@ python main.py --evaluate-only
 
 ### Main Training Options
 
+Note: `--train` is deprecated and now an alias of `--train-default`. Please update scripts.
+
 | Command | Description | Use Case |
 |---------|-------------|----------|
 | `--train-default` | Train models with default parameters | Quick prototyping, baseline results |
@@ -185,7 +187,7 @@ python main.py --run-search --model-families lightgbm_regression
 
 ### Training Modes
 
-**Simple Training (`--train`)**:
+**Simple Training (`--train-default`)**:
 - Train models with default parameters (no hyperparameter search)
 - 90% simpler than `--run-search --use-defaults`
 - Perfect for quick prototyping and baseline results
@@ -196,6 +198,22 @@ python main.py --run-search --model-families lightgbm_regression
 - Best model performance but slower execution
 - Use `--use-defaults` to skip search and use default parameters
 - Example: `python main.py --run-search --model-families xgboost_regression`
+
+### Pareto Tools
+
+Utilities for analyzing and exporting Pareto-optimal QE configurations live in `resource_prediction/pareto/` with a small CLI:
+
+```bash
+# Analyze frontier, plot focused chart, and export key models
+python -m resource_prediction.pareto.cli all
+
+# Or run individually
+python -m resource_prediction.pareto.cli analyze
+python -m resource_prediction.pareto.cli plot
+python -m resource_prediction.pareto.cli export
+```
+
+Inputs/outputs are read/written under `artifacts/pareto/` (frontier CSV, focused plot, exported models).
 
 ## Supported Models
 

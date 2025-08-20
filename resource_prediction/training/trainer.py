@@ -304,7 +304,10 @@ class Trainer:
         model.fit(X_train_fs, y_train_gb)
         # Time predictions to compute average prediction time per sample
         start_time = time.time()
-        alloc = model.predict(X_test_fs)
+        if task_type == 'classification' and confidence_threshold is not None:
+            alloc = model.predict(X_test_fs, confidence_threshold=confidence_threshold)
+        else:
+            alloc = model.predict(X_test_fs)
         end_time = time.time()
         avg_pred_time = (end_time - start_time) / len(alloc) if len(alloc) > 0 else 0
 

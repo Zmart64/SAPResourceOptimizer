@@ -70,8 +70,11 @@ class OptunaOptimizer:
         metrics_final = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics_final)
 
-    def _evaluate_classification(self, model, X, y, trial=None):
-        """Evaluates a classification model using time-series cross-validation, with optional pruning."""
+    def _evaluate_classification(self, model, X, y, trial=None, confidence_threshold: float | None = None):
+        """Evaluates a classification model using time-series cross-validation, with optional pruning.
+
+        Passes an explicit confidence_threshold to the model's predict method when provided.
+        """
         tscv = TimeSeriesSplit(n_splits=self.config.CV_SPLITS)
         allocs, truths = [], []
 
@@ -81,7 +84,10 @@ class OptunaOptimizer:
 
             # Fit and predict using the wrapper model's interface
             model.fit(X_train_fold, y_train_fold)
-            pred_allocs = model.predict(X_test_fold)
+            if confidence_threshold is not None:
+                pred_allocs = model.predict(X_test_fold, confidence_threshold=confidence_threshold)
+            else:
+                pred_allocs = model.predict(X_test_fold)
 
             allocs.extend(pred_allocs)
             truths.extend(y_test_fold)
@@ -114,7 +120,9 @@ class OptunaOptimizer:
         # Set the threshold on the model instance if it's a classification model
         if task_type == "classification":
             model.confidence_threshold = confidence_threshold
-            return self._evaluate_classification(model, X_trial, self.y_train_gb, trial)
+            return self._evaluate_classification(
+                model, X_trial, self.y_train_gb, trial, confidence_threshold=confidence_threshold
+            )
         else:
             return self._evaluate_regression(model, X_trial, self.y_train_gb, trial)
 
