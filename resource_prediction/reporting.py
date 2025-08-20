@@ -168,6 +168,17 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
             merge_cols = ['model_name'] + [c for c in metrics_cols if c in metrics_df.columns]
             df = df.merge(metrics_df[merge_cols], on='model_name', how='left', suffixes=('', '_metrics'))
 
+    # If metrics from the second merge landed in *_metrics columns, coalesce them
+    for base_col in metrics_cols:
+        metrics_col = f"{base_col}_metrics"
+        if base_col not in df.columns and metrics_col in df.columns:
+            df[base_col] = df[metrics_col]
+        elif base_col in df.columns and metrics_col in df.columns:
+            df[base_col] = df[base_col].fillna(df[metrics_col])
+        # Drop the helper column if present
+        if metrics_col in df.columns:
+            df = df.drop(columns=[metrics_col])
+
     id_col = ['model_name']
     timing_col = ['avg_pred_time'] if 'avg_pred_time' in df.columns else []
     score_col = ['score_hold'] if 'score_hold' in df.columns else []

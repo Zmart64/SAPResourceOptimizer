@@ -98,6 +98,12 @@ class Config:
             "base_model": "gb_xgb_quantile_ensemble",
             "class": GBXGBQuantileEnsemble,
         },
+        # Alias for the legacy qe_regression model using explicit GB+XGB naming
+        "gb_xgb_ensemble": {
+            "type": "regression",
+            "base_model": "gb_xgb_quantile_ensemble",
+            "class": GBXGBQuantileEnsemble,
+        },
         "lgb_xgb_ensemble": {
             "type": "regression",
             "base_model": "lgb_xgb_quantile_ensemble",
@@ -172,6 +178,30 @@ class Config:
         # GradientBoosting + XGBoost Ensemble for Quantile Regression
         # Combines two boosting algorithms with quantile loss optimization
         "qe_regression": {
+            "use_quant_feats": {"choices": [True, False], "default": True},
+            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "gb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "gb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+            "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
+            "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
+            "xgb_lr": {
+                "min": 0.01,
+                "max": 0.15,
+                "type": "float",
+                "log": True,
+                "default": 0.05,
+            },
+        },
+        # Alias identical to qe_regression hyperparameters for GB+XGB ensemble
+        "gb_xgb_ensemble": {
             "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
