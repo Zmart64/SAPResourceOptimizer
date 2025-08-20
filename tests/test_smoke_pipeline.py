@@ -136,6 +136,35 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
         _shrink_hyperparameter_configs()
 
         # Build CLI-like args for main.main
+        # Build model family list excluding 'sizey_regression'
+        all_families = sorted(Config.MODEL_FAMILIES.keys())
+        families_no_sizey = [m for m in all_families if m != "sizey_regression"]
+
+        # Build model family list excluding 'sizey_regression'
+        all_families = sorted(Config.MODEL_FAMILIES.keys())
+        families_no_sizey = [m for m in all_families if m != "sizey_regression"]
+
+        # Mirror main.py's experimental QE ensembles list for accurate reporting
+        experimental_qe_ensembles = [
+            'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+            'xgb_xgb_ensemble', 'xgb_xgb_standard_ensemble'
+        ]
+        all_qe_models = ['qe_regression'] + experimental_qe_ensembles
+
+        # Effective models that main() will run given our args
+        if include_all_qe_models:
+            effective_models = sorted(set(families_no_sizey).union(all_qe_models))
+        else:
+            effective_models = sorted(families_no_sizey)
+
+        print("\n--- Model selection summary ---")
+        print(f"Mode: {mode}, include_all_qe_models={include_all_qe_models}")
+        print(f"Total models to run: {len(effective_models)}")
+        print("Models:")
+        for m in effective_models:
+            print(f"  - {m}")
+        print("--- End selection summary ---\n")
+
         args = SimpleNamespace(
             run_search=(mode == "search"),
             train_default=(mode == "default"),
@@ -145,7 +174,8 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
             evaluate_all_archs=False,  # will be overridden by run_optimization_and_evaluation
             task_type=None,
             save_models=False,
-            model_families=None,
+            # Explicitly exclude sizey_regression from model families
+            model_families=families_no_sizey,
             use_defaults=False,
             run_all_qe_models=include_all_qe_models,
         )
@@ -185,12 +215,14 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
 
 def test_hyperparameter_search_smoke():
     """Smoke test: run --run-search on default model set with a tiny dataset and 1 trial."""
-    _run_one(mode="search", include_all_qe_models=False)
+    # Run with all experimental QE models included
+    _run_one(mode="search", include_all_qe_models=True)
 
 
 def test_train_default_smoke():
     """Smoke test: run --train-default on default model set with the tiny dataset."""
-    _run_one(mode="default", include_all_qe_models=False)
+    # Run with all experimental QE models included
+    _run_one(mode="default", include_all_qe_models=True)
 
 
 if __name__ == "__main__":
