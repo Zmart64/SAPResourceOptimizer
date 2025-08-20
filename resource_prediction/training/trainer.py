@@ -118,7 +118,7 @@ class Trainer:
             studies = optimizer.run()
 
         print("\nSearch/Training complete. Evaluating all architectures to update champion files...")
-        regr_results_df, class_results_df, _ = self._evaluate_and_report(
+        regr_results_df, class_results_df, all_model_stats = self._evaluate_and_report(
             studies, force_evaluate_all=True)
 
         if not regr_results_df.empty:
@@ -127,6 +127,14 @@ class Trainer:
         if not class_results_df.empty:
             self._update_and_save_champion_results(
                 class_results_df, self.config.CLASSIFICATION_RESULTS_CSV_PATH)
+
+        # After saving champion CSVs, generate the unified summary report which merges
+        # CV/holdout/timing metrics from those files.
+        if self.baseline_stats and all_model_stats:
+            print("\nGenerating unified allocation reports for this run...")
+            report_data = [self.baseline_stats] + all_model_stats
+            generate_summary_report(
+                report_data, self.config.ALLOCATION_SUMMARY_REPORT_PATH)
 
     def _train_with_defaults(self):
         """
@@ -454,12 +462,12 @@ class Trainer:
         class_df = pd.DataFrame(class_results)
 
         if self.baseline_stats and all_model_stats:
-            print("\nGenerating unified allocation reports for this run...")
+            # Generate allocation comparison plot now; summary report will be generated
+            # after champion CSVs are saved so it can include merged metrics.
+            print("\nGenerating allocation comparison plot for this run...")
             report_data = [self.baseline_stats] + all_model_stats
             plot_path = self.config.ALLOCATION_PLOT_PATH
             plot_allocation_comparison(report_data, plot_path)
-            generate_summary_report(
-                report_data, self.config.ALLOCATION_SUMMARY_REPORT_PATH)
 
         if should_eval_all and not regr_df.empty and not class_df.empty:
             all_results = pd.concat([regr_df, class_df], ignore_index=True)
