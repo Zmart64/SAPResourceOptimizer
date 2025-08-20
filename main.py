@@ -108,13 +108,6 @@ if __name__ == "__main__":
         action="store_true",
         help="Train models with default parameters and evaluate them. Similar to --run-search --use-defaults but simpler."
     )
-    # Backward-compatible alias for legacy scripts
-    action_group.add_argument(
-        "--train",
-        dest="train_legacy",
-        action="store_true",
-        help="[DEPRECATED] Alias for --train-default. Will be removed in a future release."
-    )
     action_group.add_argument(
         "--evaluate-only",
         action="store_true",
@@ -167,9 +160,5 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    # Promote legacy flag to new flag and warn
-    if getattr(args, "train_legacy", False):
-        print("[DEPRECATION] --train is now --train-default; please update your scripts.")
-        args.train_default = True
 
     main(args)

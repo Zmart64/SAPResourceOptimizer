@@ -126,7 +126,7 @@ python main.py --run-search --task-type classification
 # Now regression, but re-use preprocessed data from first run  
 python main.py --run-search --task-type regression --skip-preprocessing
 
-# Quick training with defaults (equivalent to --train)
+# Quick training with defaults (equivalent to --train-default)
 python main.py --run-search --use-defaults
 ```
 
@@ -141,13 +141,11 @@ python main.py --evaluate-only
 
 ### Main Training Options
 
-Note: `--train` is deprecated and now an alias of `--train-default`. Please update scripts.
-
 | Command | Description | Use Case |
 |---------|-------------|----------|
 | `--train-default` | Train models with default parameters | Quick prototyping, baseline results |
 | `--run-search` | Full hyperparameter optimization | Best performance, production models |
-| `--run-search --use-defaults` | Train with default hyperparameters instead of search (legacy `--train`) | Quick baselines |
+| `--run-search --use-defaults` | Train with default hyperparameters instead of search (equivalent to `--train-default`) | Quick baselines |
 | `--evaluate-only` | Evaluate existing trained models | Testing, comparison |
 
 ### Common Filtering Options
@@ -156,7 +154,7 @@ Note: `--train` is deprecated and now an alias of `--train-default`. Please upda
 |--------|-------------|---------|
 | `--task-type` | Filter by regression or classification | `--task-type regression` |
 | `--model-families` | Train specific model families | `--model-families xgboost_regression lightgbm_classification` |
-| `--skip-preprocessing` | Reuse preprocessed data | `--skip-preprocessing --train` |
+| `--skip-preprocessing` | Reuse preprocessed data | `--skip-preprocessing --train-default` |
 
 ### Quick Examples
 
@@ -177,7 +175,7 @@ python main.py --run-search --model-families lightgbm_regression
 ## Features
 
 - **Multiple ML Approaches**: Regression and classification models for memory prediction
-- **Flexible Training Options**: Simple `--train` mode or advanced `--run-search` with hyperparameter optimization
+- **Flexible Training Options**: Simple `--train-default` mode or advanced `--run-search` with hyperparameter optimization
 - **Automated Hyperparameter Tuning**: Optuna-based optimization with parallel execution
 - **Business-Focused Metrics**: Cost-aware objective function balancing failures vs waste
 - **Rich Feature Engineering**: Temporal, categorical, and rolling window features
