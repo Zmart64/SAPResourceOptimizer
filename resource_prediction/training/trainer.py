@@ -367,6 +367,11 @@ class Trainer:
         hold_metrics = Trainer._allocation_metrics(alloc, y_test_gb.values)
         hold_metrics["score"] = Trainer._business_score(hold_metrics)
 
+        # Enrich allocation stats with key performance metrics for lean reporting
+        model_alloc_stats["score_cv"] = study.best_value
+        model_alloc_stats["score_hold"] = hold_metrics["score"]
+        model_alloc_stats["avg_pred_time"] = avg_pred_time
+
         # Ensure the confidence_threshold is included in the results for classification
         final_params = study.best_trial.params.copy()
         if task_type == 'classification':
