@@ -50,12 +50,13 @@ def main(args):
     # Handle --run-all-qe-models flag
     model_families = args.model_families
 
-    # Define experimental QE ensemble models (exclude the standard gb_xgb_ensemble)
+    # Define experimental QE ensemble models (exclude the standard lgb_xgb_ensemble)
+    # We now treat lgb_xgb_ensemble as the standard/default QE architecture.
     experimental_qe_ensembles = [
-        'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+        'gb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
         'xgb_xgb_ensemble', 'xgb_xgb_standard_ensemble'
     ]
-    all_qe_models = ['gb_xgb_ensemble'] + experimental_qe_ensembles
+    all_qe_models = ['lgb_xgb_ensemble'] + experimental_qe_ensembles
 
     if args.run_all_qe_models:
         # When flag is set:
@@ -67,7 +68,7 @@ def main(args):
             model_families = list(sorted(set(Config.MODEL_FAMILIES.keys()).union(all_qe_models)))
     else:
         # Default behavior without the flag:
-        # If user did not specify families: run all except experimental QE ensembles (keep gb_xgb_ensemble)
+        # If user did not specify families: run all except experimental QE ensembles (keep lgb_xgb_ensemble)
         if model_families is None:
             all_models = list(Config.MODEL_FAMILIES.keys())
             model_families = [m for m in all_models if m not in experimental_qe_ensembles]
