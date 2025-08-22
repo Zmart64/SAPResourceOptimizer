@@ -139,16 +139,24 @@ def plot_allocation_comparison(all_stats: list[dict], output_path: Path):
 def generate_summary_report(all_results: list[dict], output_path: Path):
     """
     Generates a single CSV file summarizing the allocation performance
-    of the baseline and all evaluated models.
+    of the baseline and all evaluated models. This function is pure:
+    it uses only the in-memory results provided and does not read
+    configuration or other CSV files.
     """
     df = pd.DataFrame(all_results)
 
     id_col = ['model_name']
+    # Include optional metrics if they were provided upstream
+    metrics = []
+    for c in ['avg_pred_time', 'score_hold', 'score_cv']:
+        if c in df.columns:
+            metrics.append(c)
+
     count_cols = sorted([c for c in df.columns if c.endswith('_jobs')])
     perc_cols = sorted([c for c in df.columns if c.endswith('_perc')])
     mem_cols = sorted([c for c in df.columns if c.endswith('_gb')])
 
-    df = df[id_col + count_cols + perc_cols + mem_cols]
+    df = df[id_col + metrics + count_cols + perc_cols + mem_cols]
 
     for col in df.columns:
         if '_perc' in col or '_gb' in col:
@@ -156,3 +164,10 @@ def generate_summary_report(all_results: list[dict], output_path: Path):
 
     df.to_csv(output_path, index=False)
     print(f"Unified allocation summary report saved to {output_path}")
+
+    # Minimal, readable summary table (no fancy width math)
+    model_rows = df[df['model_name'] != 'Baseline']
+    summary_cols = [c for c in ['model_name', 'score_cv', 'score_hold', 'avg_pred_time'] if c in df.columns]
+    if not model_rows.empty and len(summary_cols) > 1:
+        print("\nModel Performance Summary:")
+        print(model_rows[summary_cols].to_string(index=False))

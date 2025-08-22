@@ -6,6 +6,11 @@ Test script to run hyperparameter search with minimal trials to verify everythin
 import os
 import sys
 import warnings
+try:
+    from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
+    warnings.filterwarnings('ignore', category=_OptunaExperimentalWarning)
+except Exception:
+    pass
 
 from resource_prediction.config import Config
 from resource_prediction.data_processing.preprocessor import DataPreprocessor

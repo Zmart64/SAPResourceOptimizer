@@ -55,7 +55,11 @@ def run_model(model_path, model_name, confidence_threshold=0.6):
     # Make predictions using the model interface
     try:
         # The model handles all preprocessing internally
-        predictions = model.predict(simulation_df, confidence_threshold=confidence_threshold)
+        # Pass confidence_threshold only if classification; regression ignores it
+        if getattr(model, 'task_type', None) == 'classification':
+            predictions = model.predict(simulation_df, confidence_threshold=confidence_threshold)
+        else:
+            predictions = model.predict(simulation_df)
         simulation_df['predictions'] = predictions
         
         # For classification models, also store predicted classes for display

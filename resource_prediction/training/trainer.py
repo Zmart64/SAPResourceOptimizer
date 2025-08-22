@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 import seaborn as sns
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
@@ -117,7 +118,7 @@ class Trainer:
             studies = optimizer.run()
 
         print("\nSearch/Training complete. Evaluating all architectures to update champion files...")
-        regr_results_df, class_results_df, _ = self._evaluate_and_report(
+        regr_results_df, class_results_df, all_model_stats = self._evaluate_and_report(
             studies, force_evaluate_all=True)
 
         if not regr_results_df.empty:
@@ -126,6 +127,14 @@ class Trainer:
         if not class_results_df.empty:
             self._update_and_save_champion_results(
                 class_results_df, self.config.CLASSIFICATION_RESULTS_CSV_PATH)
+
+        # After saving champion CSVs, generate the unified summary report which merges
+        # CV/holdout/timing metrics from those files.
+        if self.baseline_stats and all_model_stats:
+            print("\nGenerating unified allocation reports for this run...")
+            report_data = [self.baseline_stats] + all_model_stats
+            generate_summary_report(
+                report_data, self.config.ALLOCATION_SUMMARY_REPORT_PATH)
 
     def _train_with_defaults(self):
         """
@@ -147,38 +156,24 @@ class Trainer:
             print(f"Training {family_name} with default parameters...")
 
             # Get default parameters
-            base_model = metadata['base_model']
-            task_type = metadata['type']
-            default_params = self.config.get_default_params(
-                base_model, task_type)
+            default_params = self.config.get_defaults(family_name)
+            # Use same objective pathway as hyperparameter search for consistency
+            optimizer = OptunaOptimizer(self.config, self.X_train, self.y_train)
 
-            # Evaluate the model with default parameters using the same evaluation logic as hyperparameter search
-            from resource_prediction.training.hyperparameter import OptunaOptimizer
-            optimizer = OptunaOptimizer(
-                self.config, self.X_train, self.y_train)
-
-            # Create a mock trial with default parameters
             class DefaultTrial:
                 def __init__(self, params):
                     self.params = params
-
                 def suggest_categorical(self, name, choices):
                     return self.params.get(name, choices[0])
-
                 def suggest_int(self, name, low, high):
                     return self.params.get(name, (low + high) // 2)
-
-                def suggest_float(self, name, low, high, log=False):
+                def suggest_float(self, name, low, high, log=False, step=None):
                     return self.params.get(name, (low + high) / 2)
 
             trial = DefaultTrial(default_params)
-
-            # Evaluate the model
             try:
-                score = optimizer._objective(trial, base_model, task_type)
-
-                # Create a mock study for compatibility with existing evaluation code
-                mock_trial = MockTrial(default_params, score)
+                score = optimizer._objective(trial, family_name)
+                mock_trial = MockTrial(trial.params.copy(), score)
                 mock_study = MockStudy(family_name, mock_trial)
                 studies.append(mock_study)
 
@@ -313,9 +308,16 @@ class Trainer:
         if task_type == 'classification':
             model.confidence_threshold = confidence_threshold
 
-        # Fit and predict using the clean BasePredictor interface
+        # Fit the model
         model.fit(X_train_fs, y_train_gb)
-        alloc = model.predict(X_test_fs)
+        # Time predictions to compute average prediction time per sample
+        start_time = time.time()
+        if task_type == 'classification' and confidence_threshold is not None:
+            alloc = model.predict(X_test_fs, confidence_threshold=confidence_threshold)
+        else:
+            alloc = model.predict(X_test_fs)
+        end_time = time.time()
+        avg_pred_time = (end_time - start_time) / len(alloc) if len(alloc) > 0 else 0
 
         # Handle saving the model
         if save_model:
@@ -365,13 +367,24 @@ class Trainer:
         hold_metrics = Trainer._allocation_metrics(alloc, y_test_gb.values)
         hold_metrics["score"] = Trainer._business_score(hold_metrics)
 
+        # Enrich allocation stats with key performance metrics for lean reporting
+        model_alloc_stats["score_cv"] = study.best_value
+        model_alloc_stats["score_hold"] = hold_metrics["score"]
+        model_alloc_stats["avg_pred_time"] = avg_pred_time
+
         # Ensure the confidence_threshold is included in the results for classification
         final_params = study.best_trial.params.copy()
         if task_type == 'classification':
             final_params['confidence_threshold'] = confidence_threshold
 
-        result_row = {'model': family_name, 'score_cv': study.best_value, **
-                      final_params, **{f"{k}_hold": v for k, v in hold_metrics.items()}}
+        # Construct result row including average prediction time
+        result_row = {
+            'model': family_name,
+            'score_cv': study.best_value,
+            'avg_pred_time': avg_pred_time,
+            **final_params,
+            **{f"{k}_hold": v for k, v in hold_metrics.items()}
+        }
 
         return task_type, result_row, model_alloc_stats
 
@@ -454,12 +467,12 @@ class Trainer:
         class_df = pd.DataFrame(class_results)
 
         if self.baseline_stats and all_model_stats:
-            print("\nGenerating unified allocation reports for this run...")
+            # Generate allocation comparison plot now; summary report will be generated
+            # after champion CSVs are saved so it can include merged metrics.
+            print("\nGenerating allocation comparison plot for this run...")
             report_data = [self.baseline_stats] + all_model_stats
             plot_path = self.config.ALLOCATION_PLOT_PATH
             plot_allocation_comparison(report_data, plot_path)
-            generate_summary_report(
-                report_data, self.config.ALLOCATION_SUMMARY_REPORT_PATH)
 
         if should_eval_all and not regr_df.empty and not class_df.empty:
             all_results = pd.concat([regr_df, class_df], ignore_index=True)
@@ -473,7 +486,16 @@ class Trainer:
                 plt.title("Final Model Performance on Hold-out Data")
                 plt.tight_layout()
                 plt.savefig(self.config.RESULTS_PLOT_PATH)
-                print(
-                    f"Comparison chart saved to {self.config.RESULTS_PLOT_PATH}")
+                print(f"Comparison chart saved to {self.config.RESULTS_PLOT_PATH}")
+                # Scatter plot: Hold-out score vs prediction time
+                plt.figure(figsize=(10, 8))
+                sns.scatterplot(data=all_results, x='avg_pred_time', y='score_hold', hue='model', s=100)
+                plt.xlabel('Average Prediction Time (s)', fontsize=12)
+                plt.ylabel('Hold-out Set Business Score (Lower is Better)', fontsize=12)
+                plt.title('Prediction Time vs Model Performance', fontsize=14)
+                plt.legend(title='Model', bbox_to_anchor=(1.02, 1), loc='upper left')
+                plt.tight_layout()
+                plt.savefig(self.config.SCORE_TIME_PLOT_PATH)
+                print(f"Score vs prediction time plot saved to {self.config.SCORE_TIME_PLOT_PATH}")
 
         return regr_df, class_df, all_model_stats

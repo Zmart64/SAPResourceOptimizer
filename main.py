@@ -15,6 +15,12 @@ for var in ["OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEX
 
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=FutureWarning)
+# Suppress Optuna ExperimentalWarning for multivariate/constant_liar sampler options
+try:
+    from optuna.exceptions import ExperimentalWarning as _OptunaExperimentalWarning
+    warnings.filterwarnings('ignore', category=_OptunaExperimentalWarning)
+except Exception:
+    pass
 
 
 def main(args):
@@ -26,7 +32,7 @@ def main(args):
     """
     config = Config()
 
-    if not args.skip_preprocessing and (args.run_search or args.train or args.evaluate_only):
+    if not args.skip_preprocessing and (args.run_search or args.train_default or args.evaluate_only):
         preprocessor = DataPreprocessor(config)
         preprocessor.process()
 
@@ -36,21 +42,49 @@ def main(args):
         print("Preprocessing complete. Exiting as requested.")
         return
 
-    # Set use_defaults=True for --train option
+    # Set use_defaults=True for --train-default option
     use_defaults = getattr(args, 'use_defaults', False)
-    if hasattr(args, 'train') and args.train:
+    if args.train_default:
         use_defaults = True
+
+    # Handle --run-all-qe-models flag
+    model_families = args.model_families
+
+    # Define experimental QE ensemble models (exclude the standard lgb_xgb_ensemble)
+    # We now treat lgb_xgb_ensemble as the standard/default QE architecture.
+    experimental_qe_ensembles = [
+        'gb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
+        'xgb_xgb_ensemble', 'xgb_xgb_standard_ensemble'
+    ]
+    all_qe_models = ['lgb_xgb_ensemble'] + experimental_qe_ensembles
+
+    if args.run_all_qe_models:
+        # When flag is set:
+        # - If user specified model families: union of those + ALL QE models
+        # - Otherwise: run ALL available model families plus ALL QE models
+        if model_families:
+            model_families = list(sorted(set(model_families).union(all_qe_models)))
+        else:
+            model_families = list(sorted(set(Config.MODEL_FAMILIES.keys()).union(all_qe_models)))
+    else:
+        # Default behavior without the flag:
+        # If user did not specify families: run all except experimental QE ensembles (keep lgb_xgb_ensemble)
+        if model_families is None:
+            all_models = list(Config.MODEL_FAMILIES.keys())
+            model_families = [m for m in all_models if m not in experimental_qe_ensembles]
+
+    print("running model families:", model_families)
 
     trainer = Trainer(
         config,
         evaluate_all_archs=args.evaluate_all_archs,
         task_type_filter=args.task_type,
         save_models=args.save_models,
-        model_families=args.model_families,
+        model_families=model_families,
         use_defaults=use_defaults
     )
 
-    if args.run_search or args.train:
+    if args.run_search or args.train_default:
         trainer.run_optimization_and_evaluation()
     elif args.evaluate_only:
         trainer.run_evaluation_from_files()
@@ -70,7 +104,8 @@ if __name__ == "__main__":
         help="Run the full hyperparameter search and final evaluation."
     )
     action_group.add_argument(
-        "--train",
+        "--train-default",
+        dest="train_default",
         action="store_true",
         help="Train models with default parameters and evaluate them. Similar to --run-search --use-defaults but simpler."
     )
@@ -117,7 +152,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-defaults",
         action="store_true",
-        help="[Only with --run-search] Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization. Use --train for a simpler alternative."
+        help="[Only with --run-search] Train models with default hyperparameters instead of running hyperparameter search.\nThis provides a quick way to get baseline results without optimization. Use --train-default for a simpler alternative."
+    )
+    parser.add_argument(
+        "--run-all-qe-models",
+        action="store_true",
+        help="Run all experimental quantile ensemble models in addition to the standard gb_xgb_ensemble model.\nBy default, only gb_xgb_ensemble is run. Can be combined with --model-families."
     )
 
     args = parser.parse_args()
