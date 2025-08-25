@@ -1,3 +1,8 @@
+"""Linear regression predictor."""
+
+# Code from jonathanbader
+# Source: https://github.com/dos-group/sizey
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -5,7 +10,9 @@ from sklearn.metrics import make_scorer
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
 
-from .abstract_predictor import PredictionModel
+from resource_prediction.models.implementations.sizey.abstract_predictor import (
+    PredictionModel,
+)
 
 
 class LinearPredictor(PredictionModel):

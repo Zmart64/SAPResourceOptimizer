@@ -1,3 +1,8 @@
+""" "Random forest predictor."""
+
+# Code from jonathanbader
+# Source: https://github.com/dos-group/sizey
+
 from warnings import simplefilter
 
 import numpy as np
@@ -8,7 +13,9 @@ from sklearn.metrics import make_scorer
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
 
-from .abstract_predictor import PredictionModel
+from resource_prediction.models.implementations.sizey.abstract_predictor import (
+    PredictionModel,
+)
 
 simplefilter("ignore", category=ConvergenceWarning)
 

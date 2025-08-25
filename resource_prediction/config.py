@@ -1,24 +1,29 @@
 """Project configuration and hyperparameter search spaces."""
 
 from pathlib import Path
+
 import optuna
 
 # Direct model imports following Zmart's pattern
 from resource_prediction.models import (
-    LGBXGBQuantileEnsemble,
     GBLGBQuantileEnsemble,
-    XGBCatQuantileEnsemble,
-    LGBCatQuantileEnsemble,
-    XGBXGBQuantileEnsemble,
-    XGBXGBStandardQuantileEnsemble,
     GBXGBQuantileEnsemble,
-    XGBoostClassifier,
-    XGBoostRegressor,
+    LGBCatQuantileEnsemble,
+    LGBXGBQuantileEnsemble,
     LightGBMClassifier,
     LightGBMRegressor,
-    RandomForestClassifier,
     LogisticRegression,
+    RandomForestClassifier,
     SizeyPredictor,
+    XGBCatQuantileEnsemble,
+    XGBoostClassifier,
+    XGBoostRegressor,
+    XGBXGBQuantileEnsemble,
+    XGBXGBStandardQuantileEnsemble,
+)
+from resource_prediction.models.implementations.sizey import (
+    OffsetStrategy,
+    UnderPredictionStrategy,
 )
 
 
@@ -297,8 +302,18 @@ class Config:
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
             "conservative_quantile": {"choices": [0.95, 0.98, 0.99], "default": 0.98},
-            "conservative_n_estimators": {"min": 100, "max": 400, "type": "int", "default": 200},
-            "conservative_max_depth": {"min": 6, "max": 12, "type": "int", "default": 8},
+            "conservative_n_estimators": {
+                "min": 100,
+                "max": 400,
+                "type": "int",
+                "default": 200,
+            },
+            "conservative_max_depth": {
+                "min": 6,
+                "max": 12,
+                "type": "int",
+                "default": 8,
+            },
             "conservative_lr": {
                 "min": 0.01,
                 "max": 0.10,
@@ -308,7 +323,12 @@ class Config:
             },
             # Aggressive model parameters (lower quantile, shallower trees, more estimators)
             "aggressive_quantile": {"choices": [0.85, 0.90, 0.95], "default": 0.90},
-            "aggressive_n_estimators": {"min": 300, "max": 800, "type": "int", "default": 500},
+            "aggressive_n_estimators": {
+                "min": 300,
+                "max": 800,
+                "type": "int",
+                "default": 500,
+            },
             "aggressive_max_depth": {"min": 3, "max": 7, "type": "int", "default": 5},
             "aggressive_lr": {
                 "min": 0.03,
@@ -324,7 +344,12 @@ class Config:
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             # First XGBoost model parameters
-            "xgb1_n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
+            "xgb1_n_estimators": {
+                "min": 200,
+                "max": 800,
+                "type": "int",
+                "default": 400,
+            },
             "xgb1_max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
             "xgb1_lr": {
                 "min": 0.01,
@@ -334,7 +359,12 @@ class Config:
                 "default": 0.1,
             },
             # Second XGBoost model parameters
-            "xgb2_n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
+            "xgb2_n_estimators": {
+                "min": 200,
+                "max": 800,
+                "type": "int",
+                "default": 400,
+            },
             "xgb2_max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
             "xgb2_lr": {
                 "min": 0.01,
@@ -361,7 +391,12 @@ class Config:
         # XGBoost Classification - only XGBoost classification parameters
         "xgboost_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
-            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
+            "confidence_threshold": {
+                "min": 0.3,
+                "max": 0.9,
+                "type": "float",
+                "default": 0.5,
+            },
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -395,7 +430,12 @@ class Config:
         # LightGBM Classification - only LightGBM classification parameters
         "lightgbm_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
-            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
+            "confidence_threshold": {
+                "min": 0.3,
+                "max": 0.9,
+                "type": "float",
+                "default": 0.5,
+            },
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -415,7 +455,12 @@ class Config:
         # Random Forest Classification - only RF parameters (no alpha, no learning_rate)
         "rf_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
-            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
+            "confidence_threshold": {
+                "min": 0.3,
+                "max": 0.9,
+                "type": "float",
+                "default": 0.5,
+            },
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -427,7 +472,12 @@ class Config:
         # Logistic Regression Classification - only LR parameters
         "lr_classification": {
             "use_quant_feats": {"choices": [True, False], "default": True},
-            "confidence_threshold": {"min": 0.3, "max": 0.9, "type": "float", "default": 0.5},
+            "confidence_threshold": {
+                "min": 0.3,
+                "max": 0.9,
+                "type": "float",
+                "default": 0.5,
+            },
             "n_bins": {"min": 3, "max": 15, "type": "int", "default": 7},
             "strategy": {
                 "choices": ["uniform", "quantile", "kmeans"],
@@ -452,9 +502,10 @@ class Config:
         # Sizey Regression - Sizey-specific parameters
         "sizey_regression": {
             "use_quant_feats": {"choices": [True, False], "default": True},
-            "sizey_alpha": {"min": 0.01, "max": 0.5, "type": "float", "default": 0.1},
+            "alpha": {"min": 0.01, "max": 0.5, "type": "float", "default": 0.1},
+            "beta": {"min": 0.0, "max": 1.0, "type": "float", "default": 1.0},
             "offset_strat": {
-                "choices": ["DYNAMIC", "STD", "MED_UNDER", "MED_ALL", "STDUNDER"],
+                "choices": ["DYNAMIC", "STD_ALL", "MED_UNDER", "MED_ALL", "STD_UNDER"],
                 "default": "DYNAMIC",
             },
             "error_strat": {
@@ -518,6 +569,14 @@ class Config:
                 params.get("penalty") == "elasticnet" and params.get("solver") != "saga"
             ):
                 raise optuna.exceptions.TrialPruned()
+        elif family_name == "sizey_regression":
+            # Convert string enum values back to actual enum objects
+            if "offset_strat" in params:
+                offset_str = params["offset_strat"]
+                params["offset_strat"] = getattr(OffsetStrategy, offset_str)
+            if "error_strat" in params:
+                error_str = params["error_strat"]
+                params["error_strat"] = getattr(UnderPredictionStrategy, error_str)
         return params
 
     @staticmethod

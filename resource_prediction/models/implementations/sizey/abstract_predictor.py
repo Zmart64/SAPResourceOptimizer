@@ -1,3 +1,8 @@
+"""Abstract base class for all predictors."""
+
+# Code from jonathanbader
+# Source: https://github.com/dos-group/sizey
+
 from abc import ABCMeta
 
 import numpy as np
@@ -27,24 +32,3 @@ class PredictionModel(metaclass=ABCMeta):
 
     def update_model(self, X_train: pd.Series, y_train: float) -> None:
         raise NotImplementedError("Model update method has not been implemented.")
-
-
-class PredictionMethod(metaclass=ABCMeta):
-    def predict(self, X_test, y_test, user_estimate):
-        raise NotImplementedError("Model prediction method has not been implemented.")
-
-    def update_model(self, X_train: pd.Series, y_train: float):
-        raise NotImplementedError("Model prediction method has not been implemented.")
-
-    def handle_underprediction(
-        self,
-        input_size: float,
-        predicted: float,
-        user_estimate: float,
-        retry_number: int,
-        actual_memory: float,
-    ):
-        raise NotImplementedError("Model prediction method has not been implemented.")
-
-    def get_number_subModels(self) -> dict[str, int]:
-        raise NotImplementedError("Model prediction method has not been implemented.")

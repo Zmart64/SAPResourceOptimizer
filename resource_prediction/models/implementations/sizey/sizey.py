@@ -1,19 +1,36 @@
-"""
-SizeyPredictor - A wrapper around Sizey for resource prediction.
-Note: Sizey is supposed to be used for online learning.
-In this wrapper, we use heuristic dummy values for y_test.
-"""
+"""Sizing tasks for the Sizey model."""
+
+# Code from jonathanbader
+# Source: https://github.com/dos-group/sizey
+
+import logging
+import statistics
+import sys
+from typing import Tuple
+from warnings import simplefilter
 
 import numpy as np
+import pandas as pd
+from sklearn.exceptions import ConvergenceWarning
 
-from ...base import BasePredictor
-from .experiment_constants import ERROR_STRATEGY, OFFSET_STRATEGY
-from .sizing_tasks import Sizey
+from resource_prediction.models.implementations.sizey import (
+    KNNPredictor,
+    LinearPredictor,
+    NeuralNetworkPredictor,
+    PredictionModel,
+    RandomForestPredictor,
+)
+from resource_prediction.models.implementations.sizey.experiment_constants import (
+    OffsetStrategy,
+    UnderPredictionStrategy,
+)
+
+simplefilter("ignore", category=ConvergenceWarning)
 
 
-class SizeyPredictor(BasePredictor):
-    """
-    Sizey is an ensemble-based machine learning approach.
+class Sizey:
+    """Sizey prediction ensemble.
+
     Ensemble comprises of:
         - Linear Regression
         - Neural Network
@@ -24,122 +41,476 @@ class SizeyPredictor(BasePredictor):
     to select the best predictor or ensemble predictions.
     """
 
+    # list to store pred errors
+    pred_err_lin = []
+    pred_err_nn = []
+    pred_err_rf = []
+    pred_err_knn = []
+
+    lin_counter = 0
+    nn_counter = 0
+    rf_counter = 0
+    knn_counter = 0
+    max_counter = 0
+    softmax_counter = 0
+
+    actual_predictor = None
+
+    # Initialize Predictors
     def __init__(
         self,
-        sizey_alpha: float = 0.1,
-        offset_strat: str = "DYNAMIC",
-        error_strat: str = "MAX_EVER_OBSERVED",
-        use_softmax: bool = True,
-        error_metric: str = "smoothed_mape",
+        x_train,
+        y_train,
+        alpha: float,
+        beta: float,
+        offset_strategy: OffsetStrategy,
+        default_offset: float,
+        error_strategy: UnderPredictionStrategy,
+        use_softmax: bool,
+        error_metric: str,
     ):
-        """
-        Initialize the Sizey Predictor.
-
-        Args:
-            sizey_alpha: Set the alpha. It has to be between 0.0 and 1.0
-            offset_strat: Offset strategy (DYNAMIC, STD, MED_UNDER, MED_ALL, STDUNDER)
-            error_strat: Error strategy (MAX_EVER_OBSERVED, DOUBLE)
-            use_softmax: Interpolation strategy, softmax if True, else argmax
-            error_metric: smoothed_mape or neg_mean_squared_error
-        """
-        self.sizey_alpha = sizey_alpha
-        self.offset_strat = offset_strat
-        self.error_strat = error_strat
-        self.use_softmax = use_softmax
-        self.error_metric = error_metric
-        self.sizey_model = None
-        self.is_fitted = False
-
-        # Convert string parameters to enum values
-        self._offset_strategy = self._get_offset_strategy(offset_strat)
-        self._error_strategy = self._get_error_strategy(error_strat)
-
-    def _get_offset_strategy(self, offset_strat: str):
-        """Convert string offset strategy to enum."""
-
-        strategy_map = {
-            "DYNAMIC": OFFSET_STRATEGY.DYNAMIC,
-            "STD": OFFSET_STRATEGY.STD,
-            "MED_UNDER": OFFSET_STRATEGY.MED_UNDER,
-            "MED_ALL": OFFSET_STRATEGY.MED_ALL,
-            "STDUNDER": OFFSET_STRATEGY.STDUNDER,
-        }
-        return strategy_map.get(offset_strat, OFFSET_STRATEGY.DYNAMIC)
-
-    def _get_error_strategy(self, error_strat: str):
-        """Convert string error strategy to enum."""
-
-        strategy_map = {
-            "MAX_EVER_OBSERVED": ERROR_STRATEGY.MAX_EVER_OBSERVED,
-            "DOUBLE": ERROR_STRATEGY.DOUBLE,
-        }
-        return strategy_map.get(error_strat, ERROR_STRATEGY.MAX_EVER_OBSERVED)
-
-    def fit(self, X, y, **fit_params):
-        """
-        Fit the Sizey model to training data.
-
-        Args:
-            X: Feature matrix
-            y: Target values
-            **fit_params: Additional fitting parameters
-        """
-
-        # Convert y to numpy array and reshape to 2D as expected by Sizey
-        # Debug shapes before and after reshaping
-        y_array = y.values.reshape(-1, 1)
-        print(f"Reshaped y_array shape: {y_array.shape}")
-
-        # Initialize the Sizey model with training data
-        self.sizey_model = Sizey(
-            X_train=X,
-            y_train=y_array,
-            alpha=self.sizey_alpha,
-            offset_strategy=self._offset_strategy,
-            default_offset=0.1,  # Default offset value
-            error_strategy=self._error_strategy,
-            use_softmax=self.use_softmax,
-            error_metric=self.error_metric,
+        # Create models
+        self.linear_predictor = LinearPredictor(
+            workflow_name="Test", task_name="Test", err_metr=error_metric
+        )
+        self.neural_network_predictor = NeuralNetworkPredictor(
+            workflow_name="Test", task_name="Test", err_metr=error_metric
+        )
+        self.random_forest_predictor = RandomForestPredictor(
+            workflow_name="Test", task_name="Test", err_metr=error_metric
+        )
+        self.knn_predictor = KNNPredictor(
+            workflow_name="Test", task_name="Test", err_metr=error_metric
         )
 
-        self.is_fitted = True
+        self.alpha = alpha
+        self.beta = beta
+        self.offset_strategy = offset_strategy
+        self.default_offset = default_offset
+        self.error_strategy = error_strategy
+        self.use_softmax = use_softmax
+        self.error_metric = error_metric
 
-    def predict(self, X, y=None):
-        """
-        Make predictions using the Sizey model.
+        self.max_memory_observed = max(y_train)[0]
+        self.min_memory_observed = min(y_train)[0]
 
+        # Dataframes to continuously learn
+        # are updated when predicting
+        self.x_full = x_train.values
+        self.y_full = y_train
+
+        # Train all models initially
+        self._initial_model_training(x_train, y_train)
+
+    # Initial Training
+    def _initial_model_training(self, x_train, y_train) -> None:
+        self.linear_predictor.initial_model_training(x_train, y_train)
+        logging.debug("Linear predictor trained")
+        self.neural_network_predictor.initial_model_training(x_train, y_train)
+        logging.debug("Neural network predictor trained")
+        self.random_forest_predictor.initial_model_training(x_train, y_train)
+        logging.debug("Random forest predictor trained")
+        self.knn_predictor.initial_model_training(x_train, y_train)
+        logging.debug("KNN predictor trained")
+
+    # Predict value, scored by RAQ
+    def predict(self, x_test: pd.Series, y_test: int) -> Tuple[float, float]:
+        """Predict the target value.
         Args:
-            X: Feature matrix (pandas DataFrame)
-            y: True target value (pandas Series)
+            x_test (pd.Series): The input features for prediction.
+            y_test (int): The true target value to calculate prediction error.
 
         Returns:
-            Predicted values (numpy array)
+            Tuple[float, float]: The offsetted prediction value and the raw prediction.
         """
-
-        if not self.is_fitted:
-            raise ValueError("Model must be fitted before making predictions")
-
-        predictions = []
-
-        for idx in range(len(X)):
-            # Get the row as a pandas Series
-            x_test = X.iloc[idx]
-            y_test = y.iloc[idx]
-
-            # Get prediction from Sizey model
-            # Sizey returns (prediction_with_offset, raw_prediction)
-            prediction_with_offset, raw_prediction = self.sizey_model.predict(
-                X_test=x_test, y_test=y_test, user_estimate=None
+        # Handle multi-feature concatenation
+        if (
+            len(x_test.shape) == 1
+            and len(self.x_full.shape) == 2
+            and self.x_full.shape[1] > 1
+        ):
+            # X_test is 1D but X_full is multi-feature, reshape X_test appropriately
+            x_test_reshaped = x_test.values.reshape(1, -1)
+        else:
+            # Original single-feature case or already correctly shaped
+            x_test_reshaped = x_test.values.reshape(
+                -1, self.x_full.shape[1] if len(self.x_full.shape) == 2 else 1
             )
 
-            # Extract scalar value from prediction_with_offset (may be a nested array)
-            if hasattr(prediction_with_offset, "flatten"):
-                prediction_value = prediction_with_offset.flatten()[0]
-            else:
-                prediction_value = prediction_with_offset
+        self.x_full = np.concatenate((self.x_full, x_test_reshaped))
+        self.y_full = np.append(self.y_full, y_test)
 
-            print(f"Raw prediction: {raw_prediction}")
+        # Step 1.
+        # Each model makes a prediction
+        prediction_lin = self.linear_predictor.predict_task(x_test).flatten()[0]
+        self.pred_err_lin.append(((y_test - prediction_lin) / y_test))
+        logging.debug("Linear prediction (raw):         %s", prediction_lin)
 
-            predictions.append(prediction_value)
+        prediction_nn = self.neural_network_predictor.predict_task(x_test).flatten()[0]
+        self.pred_err_nn.append(((y_test - prediction_nn) / y_test))
+        logging.debug("Neural network prediction (raw): %s", prediction_nn)
 
-        return np.array(predictions)
+        prediction_rf = self.random_forest_predictor.predict_task(x_test).flatten()[0]
+        self.pred_err_rf.append(((y_test - prediction_rf) / y_test))
+        logging.debug("Random forest prediction (raw):  %s", prediction_rf)
+
+        prediction_knn = self.knn_predictor.predict_task(x_test).flatten()[0]
+        self.pred_err_knn.append(((y_test - prediction_knn) / y_test))
+        logging.debug("KNN prediction (raw):            %s", prediction_knn)
+
+        # Step 2.
+        # RAQ scoring
+        max_prediction = max(
+            [prediction_lin, prediction_nn, prediction_rf, prediction_knn]
+        )
+
+        # Step 2.1
+        # Get accuracy
+        accuracy_lin = self.linear_predictor.model_error
+        accuracy_nn = self.neural_network_predictor.model_error
+        accuracy_rf = self.random_forest_predictor.model_error
+        accuracy_knn = self.knn_predictor.model_error
+
+        # Step 2.2
+        # Get efficiency
+        efficiency_lin = 1 - prediction_lin / max_prediction
+        efficiency_nn = 1 - prediction_nn / max_prediction
+        efficiency_rf = 1 - prediction_rf / max_prediction
+        efficiency_knn = 1 - prediction_knn / max_prediction
+
+        # Step 2.3
+        # Calculate RAQ score
+
+        # Alpha near 0 prioritizes accurate models
+        # Alpha near 1 prioritizes more memory-efficient predictions
+        raq_lin = (1 - self.alpha) * accuracy_lin + (self.alpha * efficiency_lin)
+        raq_nn = (1 - self.alpha) * accuracy_nn + (self.alpha * efficiency_nn)
+        raq_rf = (1 - self.alpha) * accuracy_rf + (self.alpha * efficiency_rf)
+        raq_knn = (1 - self.alpha) * accuracy_knn + (self.alpha * efficiency_knn)
+
+        # Create dict mapping model names to RAQ scores
+        raq_scores = {
+            "LR": raq_lin,
+            "NN": raq_nn,
+            "RF": raq_rf,
+            "KNN": raq_knn,
+        }
+
+        logging.debug(raq_scores)
+
+        # Step 3 Model selection strategy
+        # If softmax is true, we interpolate with hyperparameter beta
+        # If softmax is false, we select the model with the highest RAQ score
+
+        if not self.use_softmax:
+            logging.debug("Using argmax strategy to weigh predictors")
+            max_raq_strategy = max(raq_scores.values())
+            selected_model = next(
+                model for model, raq in raq_scores.items() if raq == max_raq_strategy
+            )
+            logging.debug("%s chosen with RAQ   %s", selected_model, max_raq_strategy)
+
+            prediction = None
+            offset = None
+
+            if selected_model == "LR":
+                self.actual_predictor = self.linear_predictor
+                self.lin_counter += 1
+                prediction = prediction_lin
+                offset = self._calculate_offset(
+                    self.offset_strategy,
+                    self.default_offset,
+                    self.pred_err_lin,
+                    self.linear_predictor,
+                )
+                logging.debug("LR accuracy:         %s", accuracy_lin)
+                logging.debug("LR efficiency:       %s", efficiency_lin)
+                logging.debug("LR offset:           %s", offset)
+            elif selected_model == "NN":
+                self.actual_predictor = self.neural_network_predictor
+                self.nn_counter += 1
+                prediction = prediction_nn
+                offset = self._calculate_offset(
+                    self.offset_strategy,
+                    self.default_offset,
+                    self.pred_err_nn,
+                    self.neural_network_predictor,
+                )
+                logging.debug("NN accuracy:         %s", accuracy_nn)
+                logging.debug("NN efficiency:       %s", efficiency_nn)
+                logging.debug("NN offset:           %s", offset)
+            elif selected_model == "RF":
+                self.actual_predictor = self.random_forest_predictor
+                self.rf_counter += 1
+                prediction = prediction_rf
+                offset = self._calculate_offset(
+                    self.offset_strategy,
+                    self.default_offset,
+                    self.pred_err_rf,
+                    self.random_forest_predictor,
+                )
+                logging.debug("RF accuracy:         %s", accuracy_rf)
+                logging.debug("RF efficiency:       %s", efficiency_rf)
+                logging.debug("RF offset:           %s", offset)
+            elif selected_model == "KNN":
+                self.actual_predictor = self.knn_predictor
+                self.knn_counter += 1
+                prediction = prediction_knn
+                offset = self._calculate_offset(
+                    self.offset_strategy,
+                    self.default_offset,
+                    self.pred_err_knn,
+                    self.knn_predictor,
+                )
+                logging.debug("KNN accuracy:         %s", accuracy_knn)
+                logging.debug("KNN efficiency:       %s", efficiency_knn)
+                logging.debug("KNN offset:           %s", offset)
+
+            logging.debug("\n")
+
+            if prediction is not None and offset is not None:
+                offset_prediction = prediction + offset * prediction
+                return offset_prediction, prediction
+
+            raise ValueError("No valid model selected")
+
+        # Else it is softmax strategy
+        logging.debug("Using softmax strategy to weigh predictors")
+        offset_lin = self._calculate_offset(
+            self.offset_strategy,
+            self.default_offset,
+            self.pred_err_lin,
+            self.linear_predictor,
+        )
+        logging.debug("Linear offset: %s", offset_lin)
+
+        offset_nn = self._calculate_offset(
+            self.offset_strategy,
+            self.default_offset,
+            self.pred_err_nn,
+            self.neural_network_predictor,
+        )
+        logging.debug("Neural network offset: %s", offset_nn)
+
+        offset_rf = self._calculate_offset(
+            self.offset_strategy,
+            self.default_offset,
+            self.pred_err_rf,
+            self.random_forest_predictor,
+        )
+        logging.debug("Random forest offset: %s", offset_rf)
+
+        # start_time = time.time()
+        offset_knn = self._calculate_offset(
+            self.offset_strategy,
+            self.default_offset,
+            self.pred_err_knn,
+            self.knn_predictor,
+        )
+        # end_time = time.time()
+        # print(f"KNN offset calculation time: {end_time - start_time:.6f} seconds")
+        logging.debug("KNN offset: %s", offset_knn)
+
+        sum_raq_softmax = (
+            np.exp(self.beta * raq_lin)
+            + np.exp(self.beta * raq_nn)
+            + np.exp(self.beta * raq_rf)
+            + np.exp(self.beta * raq_knn)
+        )
+        y_pred_softmax = (
+            prediction_lin * (np.exp(self.beta * raq_lin) / sum_raq_softmax)
+            + prediction_nn * (np.exp(self.beta * raq_nn) / sum_raq_softmax)
+            + prediction_rf * (np.exp(self.beta * raq_rf) / sum_raq_softmax)
+            + prediction_knn * (np.exp(self.beta * raq_knn) / sum_raq_softmax)
+        )
+
+        y_pred_softmax_offset = (
+            offset_lin * (np.exp(self.beta * raq_lin) / sum_raq_softmax)
+            + offset_nn * (np.exp(self.beta * raq_nn) / sum_raq_softmax)
+            + offset_rf * (np.exp(self.beta * raq_rf) / sum_raq_softmax)
+            + offset_knn * (np.exp(self.beta * raq_knn) / sum_raq_softmax)
+        )
+
+        self.softmax_counter += 1
+        offset_prediction = y_pred_softmax + y_pred_softmax * y_pred_softmax_offset
+
+        if offset_prediction < 0:
+            return (
+                self.min_memory_observed * self.default_offset,
+                self.min_memory_observed * self.default_offset,
+            )
+
+        return offset_prediction, y_pred_softmax
+
+    def _check_gt0(self, prediction) -> bool:
+        return prediction > 0
+
+    def _calculate_offset(
+        self,
+        offset_strategy: OffsetStrategy,
+        default_offset: float,
+        prediction_error_list: list,
+        predictor: PredictionModel,
+    ) -> float:
+        """Calculate offset based on strategy and predictor error."""
+        if len(prediction_error_list) < 1:
+            return default_offset
+
+        if offset_strategy == OffsetStrategy.MED_ALL:
+            return self._calculate_med_all_offset(prediction_error_list)
+
+        if offset_strategy == OffsetStrategy.MED_UNDER:
+            return self._calculate_med_under_offset(prediction_error_list)
+
+        if offset_strategy == OffsetStrategy.STD_ALL:
+            return self._calculate_std_all_offset(prediction_error_list)
+
+        if offset_strategy == OffsetStrategy.STD_UNDER:
+            return self._calculate_std_under_offset(prediction_error_list)
+
+        # Dynamic strategy
+        if offset_strategy == OffsetStrategy.DYNAMIC:
+            return self._calculate_dynamic_offset(prediction_error_list, predictor)
+            # return self._select_dynamic_offset_wastage(prediction_error_list, predictor)
+
+        raise NotImplementedError(
+            "Offset strategy " + str(offset_strategy) + " not found."
+        )
+
+    def _calculate_med_all_offset(self, prediction_error_list: list) -> float:
+        """Calculate median offset for all predictions."""
+        prediction_error_list = np.absolute(prediction_error_list)
+        return statistics.median(list(filter(self._check_gt0, prediction_error_list)))
+
+    def _calculate_med_under_offset(self, prediction_error_list: list) -> float:
+        """Calculate median offset for under-predictions."""
+        if len(list(filter(self._check_gt0, prediction_error_list))) > 0:
+            return statistics.median(
+                list(filter(self._check_gt0, prediction_error_list))
+            )
+        return self.default_offset
+
+    def _calculate_std_all_offset(self, prediction_error_list: list) -> float:
+        """Calculate standard deviation offset for all predictions."""
+        absolute_errors = np.absolute(prediction_error_list)
+        q_1 = np.percentile(absolute_errors, 10)
+        q_3 = np.percentile(absolute_errors, 90)
+        iqr = q_3 - q_1
+        lower_bound = q_1 - 1.5 * iqr
+        upper_bound = q_3 + 1.5 * iqr
+        # outliers = absolute_errors[
+        #     (absolute_errors < lower_bound) | (absolute_errors > upper_bound)
+        # ]
+        cleaned_errors = absolute_errors[
+            (absolute_errors >= lower_bound) & (absolute_errors <= upper_bound)
+        ]
+        cleaned_std_dev = np.std(cleaned_errors)
+        return cleaned_std_dev
+
+    def _calculate_std_under_offset(self, prediction_error_list: list) -> float:
+        """Calculate standard deviation offset for under-predictions."""
+        if len(list(filter(self._check_gt0, prediction_error_list))) > 0:
+            return np.std(list(filter(self._check_gt0, prediction_error_list)))
+        return self.default_offset
+
+    def _calculate_dynamic_offset(
+        self, prediction_error_list: list, predictor
+    ) -> float:
+        """Calculate dynamic offset based on prediction errors."""
+        # Predict over whole dataset
+        y_hat_base = predictor.predict_tasks(self.x_full)
+        y_hat_base = y_hat_base.ravel()
+
+        # Get offsets for all strategies
+        std_all_offset = self._calculate_std_all_offset(prediction_error_list)
+        std_under_offset = self._calculate_std_under_offset(prediction_error_list)
+        median_all_offset = self._calculate_med_all_offset(prediction_error_list)
+        median_under_offset = self._calculate_med_under_offset(prediction_error_list)
+
+        min_offset_value = None
+        min_wastage = sys.maxsize
+
+        # Define offset values to test
+        offset_values = [
+            std_all_offset,
+            std_under_offset,
+            median_all_offset,
+            median_under_offset,
+        ]
+
+        for offset_value in offset_values:
+            # Use copy of base predictions for each iteration
+            y_hat = y_hat_base.copy()
+
+            y_hat = y_hat + offset_value * y_hat
+
+            y_hat_wo_below_zero = y_hat[y_hat > 0]
+            y_hat = np.where(y_hat > 0, y_hat, np.min(y_hat_wo_below_zero.min()))
+
+            diff_arr = y_hat - self.y_full
+
+            vectorized_function = np.vectorize(self._next_or_same_power_of_two)
+
+            wastage_over = np.where(diff_arr > 0, diff_arr, 0).sum()
+            wastage_under = (
+                (
+                    vectorized_function(
+                        np.where(diff_arr < 0, 1, 0) * self.y_full / y_hat
+                    )
+                )
+                / 2
+                * y_hat
+                + (
+                    vectorized_function(
+                        np.where(diff_arr < 0, 1, 0) * self.y_full / y_hat
+                    )
+                    * y_hat
+                )
+                - (np.where(diff_arr < 0, 1, 0) * self.y_full)
+            ).sum()
+
+            wastage = wastage_over + wastage_under
+
+            if wastage < min_wastage:
+                min_wastage = wastage
+                min_offset_value = offset_value
+
+        return min_offset_value if min_offset_value is not None else self.default_offset
+
+    def _next_or_same_power_of_two(self, n):
+        """Returns the next power of two greater than or equal to n."""
+        n = int(np.ceil(n))
+
+        if n < 0:
+            raise ValueError("n must be greater than 0")
+
+        if n == 0:
+            return n
+
+        power = 1
+        while power < n:
+            power <<= 1
+        return power
+
+    def handle_underprediction(
+        self,
+        predicted: float,
+    ) -> float:
+        """Handle underprediction."""
+
+        # Double strategy
+        if self.error_strategy == UnderPredictionStrategy.DOUBLE:
+            return predicted * 2
+        return self.max_memory_observed
+
+    def update_model(self, x_train: pd.Series, y_train: float) -> None:
+        """Update the underlying models."""
+        if y_train > self.max_memory_observed:
+            self.max_memory_observed = y_train
+        if y_train < self.min_memory_observed:
+            self.min_memory_observed = y_train
+
+        self.linear_predictor.update_model(x_train, y_train)
+        self.neural_network_predictor.update_model(x_train, y_train)
+        self.random_forest_predictor.update_model(x_train, y_train)
+        self.neural_network_predictor.update_model(x_train, y_train)

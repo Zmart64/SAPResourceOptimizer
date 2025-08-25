@@ -1,3 +1,8 @@
+"""K-Nearest Neighbors Regression Predictor"""
+
+# Code from jonathanbader
+# Source: https://github.com/dos-group/sizey
+
 from warnings import simplefilter
 
 import numpy as np
@@ -8,12 +13,16 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import MinMaxScaler
 
-from .abstract_predictor import PredictionModel
+from resource_prediction.models.implementations.sizey import (
+    PredictionModel,
+)
 
 simplefilter("ignore", category=ConvergenceWarning)
 
 
 class KNNPredictor(PredictionModel):
+    """K-Nearest Neighbors Regression Predictor"""
+
     def initial_model_training(self, X_train, y_train) -> None:
         # Initialize internal storage of historical values
         self.X_train_full = X_train
