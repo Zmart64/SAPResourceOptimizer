@@ -84,14 +84,7 @@ class Config:
         "lag_max_rss_global_w5",
         "rolling_p95_rss_g1_w5",
     ]
-    QUANT_FEATURES = [
-        "build_load",
-        "target_intensity",
-        "debug_multiplier",
-        "heavy_target_flag",
-        "high_parallelism",
-    ]
-    ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES + QUANT_FEATURES))
+    ALL_FEATURES = list(dict.fromkeys(BASE_FEATURES))
 
     CV_SPLITS = 3
     N_CALLS_PER_FAMILY = 128
@@ -177,7 +170,6 @@ class Config:
     HYPERPARAMETER_CONFIGS = {
         # GradientBoosting + XGBoost Ensemble for Quantile Regression (standard QE)
         "gb_xgb_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
@@ -201,7 +193,6 @@ class Config:
         },
         # LightGBM + XGBoost Ensemble
         "lgb_xgb_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
@@ -225,7 +216,6 @@ class Config:
         },
         # GradientBoosting + LightGBM Ensemble
         "gb_lgb_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
@@ -249,7 +239,6 @@ class Config:
         },
         # XGBoost + CatBoost Ensemble
         "xgb_cat_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
@@ -273,7 +262,6 @@ class Config:
         },
         # LightGBM + CatBoost Ensemble
         "lgb_cat_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
@@ -297,7 +285,6 @@ class Config:
         },
         # XGBoost + XGBoost Ensemble (conservative + aggressive quantile models)
         "xgb_xgb_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             # Conservative model parameters (higher quantile, deeper trees, fewer estimators)
@@ -340,7 +327,6 @@ class Config:
         },
         # XGBoost + XGBoost Standard Ensemble (standard ranges like other ensembles)
         "xgb_xgb_standard_ensemble": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             # First XGBoost model parameters
@@ -376,7 +362,6 @@ class Config:
         },
         # XGBoost Regression - only XGBoost regression parameters
         "xgboost_regression": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
             "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
@@ -390,7 +375,6 @@ class Config:
         },
         # XGBoost Classification - only XGBoost classification parameters
         "xgboost_classification": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "confidence_threshold": {
                 "min": 0.3,
                 "max": 0.9,
@@ -414,7 +398,6 @@ class Config:
         },
         # LightGBM Regression - only LightGBM regression parameters
         "lightgbm_regression": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
             "n_estimators": {"min": 100, "max": 700, "type": "int", "default": 400},
             "num_leaves": {"min": 20, "max": 60, "type": "int", "default": 31},
@@ -429,7 +412,6 @@ class Config:
         },
         # LightGBM Classification - only LightGBM classification parameters
         "lightgbm_classification": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "confidence_threshold": {
                 "min": 0.3,
                 "max": 0.9,
@@ -454,7 +436,6 @@ class Config:
         },
         # Random Forest Classification - only RF parameters (no alpha, no learning_rate)
         "rf_classification": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "confidence_threshold": {
                 "min": 0.3,
                 "max": 0.9,
@@ -471,7 +452,6 @@ class Config:
         },
         # Logistic Regression Classification - only LR parameters
         "lr_classification": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "confidence_threshold": {
                 "min": 0.3,
                 "max": 0.9,
@@ -501,7 +481,6 @@ class Config:
         },
         # Sizey Regression - Sizey-specific parameters
         "sizey_regression": {
-            "use_quant_feats": {"choices": [True, False], "default": True},
             "alpha": {"min": 0.01, "max": 0.5, "type": "float", "default": 0.1},
             "beta": {"min": 0.0, "max": 1.0, "type": "float", "default": 1.0},
             "offset_strat": {

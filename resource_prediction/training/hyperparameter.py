@@ -26,11 +26,9 @@ class OptunaOptimizer:
         self.model_families = model_families
         self.config.OPTUNA_DB_DIR.mkdir(exist_ok=True, parents=True)
 
-    def _get_feature_set(self, use_quant_feats: bool):
-        """Assembles the feature dataframe based on the trial parameter."""
-        features = self.config.BASE_FEATURES + (
-            self.config.QUANT_FEATURES if use_quant_feats else []
-        )
+    def _get_feature_set(self):
+        """Assembles the feature dataframe using only base features."""
+        features = self.config.BASE_FEATURES
         return self.X_train[list(dict.fromkeys(features))]
 
     def _business_score(self, metrics):
@@ -105,8 +103,7 @@ class OptunaOptimizer:
     def _objective(self, trial, family_name):
         """The core objective function for Optuna to minimize."""
         params = self.config.get_search_space(trial, family_name)
-        use_quant_feats = params.pop("use_quant_feats")
-        X_trial = self._get_feature_set(use_quant_feats)
+        X_trial = self._get_feature_set()
 
         family_info = self.config.MODEL_FAMILIES[family_name]
         model_class = family_info["class"]

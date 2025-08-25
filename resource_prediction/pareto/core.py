@@ -70,7 +70,6 @@ def _get_best_lgb_xgb_hparams(cfg: Config) -> dict | None:
             return None
         row = df.iloc[0]
         return {
-            "use_quant_feats": bool(row.get("use_quant_feats", True)),
             "lgb_n_estimators": int(row.get("lgb_n_estimators", 300)),
             "lgb_num_leaves": int(row.get("lgb_num_leaves", 31)),
             "lgb_lr": float(row.get("lgb_lr", 0.05)),
@@ -103,7 +102,6 @@ def generate_frontier(cfg: Config, alphas: Iterable[float] | None = None, safeti
 
     # Determine features and hyperparameters
     best = _get_best_lgb_xgb_hparams(cfg) or {
-        "use_quant_feats": True,
         "lgb_n_estimators": 300,
         "lgb_num_leaves": 31,
         "lgb_lr": 0.05,
@@ -111,7 +109,7 @@ def generate_frontier(cfg: Config, alphas: Iterable[float] | None = None, safeti
         "xgb_max_depth": 6,
         "xgb_lr": 0.05,
     }
-    features = cfg.BASE_FEATURES + (cfg.QUANT_FEATURES if best["use_quant_feats"] else [])
+    features = cfg.BASE_FEATURES
     X_train_fs = X_train[features]
     X_test_fs = X_test[features]
 

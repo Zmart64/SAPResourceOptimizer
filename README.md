@@ -323,7 +323,6 @@ The architecture makes it simple to add new models. Both hyperparameter search a
    ```python
    HYPERPARAMETER_CONFIGS = {
        "my_new_model_regression": {  # Use the full family name
-           "use_quant_feats": {"choices": [True, False], "default": True},  # If needed
            "param1": {"min": 50, "max": 200, "type": "int", "default": 100},
            "param2": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
            # Only include parameters your model actually uses!

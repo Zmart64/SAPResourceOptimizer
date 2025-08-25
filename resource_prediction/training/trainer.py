@@ -284,10 +284,8 @@ class Trainer:
         task_type, base_model_name = metadata['type'], metadata['base_model']
         best_params = study.best_trial.params.copy()
 
-        # Get feature selection
-        use_quant = best_params.pop("use_quant_feats", True)
-        base_features = config.BASE_FEATURES + \
-            (config.QUANT_FEATURES if use_quant else [])
+        # Use only base features
+        base_features = config.BASE_FEATURES
         X_train_fs, X_test_fs = X_train[base_features], X_test[base_features]
         y_train_gb, y_test_gb = y_train[config.TARGET_COLUMN_PROCESSED], y_test[config.TARGET_COLUMN_PROCESSED]
 

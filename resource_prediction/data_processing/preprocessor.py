@@ -76,13 +76,7 @@ class DataPreprocessor:
         F["target_cnt"] = F["targets"].astype(str).str.count(",") + 1
         F["target_has_dist"] = F["targets"].astype(
             str).str.contains("dist").astype(int)
-        F["build_load"] = F["jobs"] + F["localJobs"]
-        F["target_intensity"] = F["targets"].astype(str).str.len() / 100.0
-        F["debug_multiplier"] = F["bp_opt"].str.contains(
-            "debug|asan|tsan", case=False).astype(int)
-        F["heavy_target_flag"] = F["targets"].str.contains(
-            "all|dist|install", case=False).astype(int)
-        F["high_parallelism"] = (F["localJobs"] > 8).astype(int)
+        # Quant-derived features have been removed to simplify the feature set
 
         grp_cols = ["component", "bp_arch",
                     "bp_compiler", "bp_opt", "makeType"]
