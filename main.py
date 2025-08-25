@@ -73,8 +73,6 @@ def main(args):
             all_models = list(Config.MODEL_FAMILIES.keys())
             model_families = [m for m in all_models if m not in experimental_qe_ensembles]
 
-    print("running model families:", model_families)
-
     trainer = Trainer(
         config,
         evaluate_all_archs=args.evaluate_all_archs,

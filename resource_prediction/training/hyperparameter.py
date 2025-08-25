@@ -131,12 +131,28 @@ class OptunaOptimizer:
         deterministic name.
         """
         all_studies = []
+
+        # Compute the final set of families to run after applying filters
+        known_families = set(self.config.MODEL_FAMILIES.keys())
+        requested_families = set(self.model_families) if self.model_families else None
+        unknown_families = set()
+        if requested_families is not None:
+            unknown_families = requested_families - known_families
+
+        selected_families: list[tuple[str, str]] = []  # (name, type)
         for family_name, metadata in self.config.MODEL_FAMILIES.items():
             if self.task_type_filter and metadata["type"] != self.task_type_filter:
                 continue
-            if self.model_families and family_name not in self.model_families:
+            if requested_families is not None and family_name not in requested_families:
                 continue
+            selected_families.append((family_name, metadata["type"]))
 
+        print("\nModel families selected for this run:")
+        for name, typ in selected_families:
+            print(f"  - {name} [{typ}]")
+
+        for family_name, _family_type in selected_families:
+            
             storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"
             db_path = self.config.OPTUNA_DB_DIR / f"{family_name}.db"
             study = None
