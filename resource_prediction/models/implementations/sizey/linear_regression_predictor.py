@@ -16,6 +16,16 @@ from resource_prediction.models.implementations.sizey.abstract_predictor import 
 
 
 class LinearPredictor(PredictionModel):
+    """Linear regression predictor."""
+
+    def __init__(
+        self, workflow_name: str, task_name: str, err_metr: str, random_state: int
+    ):
+        super().__init__(workflow_name, task_name, err_metr)
+        self.random_state = random_state
+        self.model_error = None
+        self.regressor = None
+
     def initial_model_training(self, X_train, y_train) -> None:
         self.X_train_full = X_train
         self.y_train_full = y_train
@@ -86,14 +96,13 @@ class LinearPredictor(PredictionModel):
 
         smoothed_mape_scorer = make_scorer(self.smoothed_mape, greater_is_better=True)
 
-        param_grid = {}
-
+        grid_params = {}
         model = LinearRegression()
 
         if self.err_metr == "smoothed_mape":
             grid_search = GridSearchCV(
                 estimator=model,
-                param_grid=param_grid,
+                param_grid=grid_params,
                 cv=10,
                 error_score="raise",
                 n_jobs=-1,
@@ -102,7 +111,7 @@ class LinearPredictor(PredictionModel):
         elif self.err_metr == "neg_mean_squared_error":
             grid_search = GridSearchCV(
                 estimator=model,
-                param_grid=param_grid,
+                param_grid=grid_params,
                 cv=10,
                 error_score="raise",
                 n_jobs=-1,

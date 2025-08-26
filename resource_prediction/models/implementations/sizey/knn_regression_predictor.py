@@ -23,6 +23,14 @@ simplefilter("ignore", category=ConvergenceWarning)
 class KNNPredictor(PredictionModel):
     """K-Nearest Neighbors Regression Predictor"""
 
+    def __init__(
+        self, workflow_name: str, task_name: str, err_metr: str, random_state: int
+    ):
+        super().__init__(workflow_name, task_name, err_metr)
+        self.random_state = random_state
+        self.model_error = None
+        self.regressor = None
+
     def initial_model_training(self, X_train, y_train) -> None:
         # Initialize internal storage of historical values
         self.X_train_full = X_train

@@ -33,6 +33,7 @@ class SizeyPredictor(BasePredictor):
         error_strat: UnderPredictionStrategy = UnderPredictionStrategy.MAX_EVER_OBSERVED,
         use_softmax: bool = True,
         error_metric: str = "smoothed_mape",
+        random_state: int = 42,
     ):
         """
         Initialize the Sizey Predictor.
@@ -49,6 +50,7 @@ class SizeyPredictor(BasePredictor):
         self.error_strat = error_strat
         self.use_softmax = use_softmax
         self.error_metric = error_metric
+        self.random_state = random_state
         self.sizey_model = None
         self.is_fitted = False
 
@@ -78,6 +80,7 @@ class SizeyPredictor(BasePredictor):
             error_strategy=self.error_strat,
             use_softmax=self.use_softmax,
             error_metric=self.error_metric,
+            random_state=self.random_state,
         )
 
         self.is_fitted = True

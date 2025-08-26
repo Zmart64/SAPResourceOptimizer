@@ -68,19 +68,32 @@ class Sizey:
         error_strategy: UnderPredictionStrategy,
         use_softmax: bool,
         error_metric: str,
+        random_state: int,
     ):
         # Create models
         self.linear_predictor = LinearPredictor(
-            workflow_name="Test", task_name="Test", err_metr=error_metric
+            workflow_name="Test",
+            task_name="Test",
+            err_metr=error_metric,
+            random_state=random_state,
         )
         self.neural_network_predictor = NeuralNetworkPredictor(
-            workflow_name="Test", task_name="Test", err_metr=error_metric
+            workflow_name="Test",
+            task_name="Test",
+            err_metr=error_metric,
+            random_state=random_state,
         )
         self.random_forest_predictor = RandomForestPredictor(
-            workflow_name="Test", task_name="Test", err_metr=error_metric
+            workflow_name="Test",
+            task_name="Test",
+            err_metr=error_metric,
+            random_state=random_state,
         )
         self.knn_predictor = KNNPredictor(
-            workflow_name="Test", task_name="Test", err_metr=error_metric
+            workflow_name="Test",
+            task_name="Test",
+            err_metr=error_metric,
+            random_state=random_state,
         )
 
         self.alpha = alpha
