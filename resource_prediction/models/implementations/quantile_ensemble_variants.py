@@ -9,6 +9,7 @@ import catboost as cat
 from typing import Dict, Any, Optional
 
 from ..base import BasePredictor
+from .sklearn_models import RandomForestQuantileRegressor
 
 
 class GBXGBQuantileEnsemble(BasePredictor):
@@ -218,6 +219,7 @@ class LGBXGBQuantileEnsemble(BasePredictor):
         lgb_n_estimators: Optional[int] = None,
         lgb_max_depth: Optional[int] = None,
         lgb_lr: Optional[float] = None,
+        lgb_num_leaves: Optional[int] = None,
         xgb_n_estimators: Optional[int] = None,
         xgb_max_depth: Optional[int] = None,
         xgb_lr: Optional[float] = None,
@@ -261,6 +263,8 @@ class LGBXGBQuantileEnsemble(BasePredictor):
             final_lgb_params["max_depth"] = lgb_max_depth
         if lgb_lr is not None:
             final_lgb_params["learning_rate"] = lgb_lr
+        if lgb_num_leaves is not None:
+            final_lgb_params["num_leaves"] = lgb_num_leaves
             
         self.lgb = lgb.LGBMRegressor(**final_lgb_params)
         
@@ -414,6 +418,7 @@ class GBLGBQuantileEnsemble(BasePredictor):
         lgb_n_estimators: Optional[int] = None,
         lgb_max_depth: Optional[int] = None,
         lgb_lr: Optional[float] = None,
+        lgb_num_leaves: Optional[int] = None,
         **kwargs
     ):
         """
@@ -469,6 +474,8 @@ class GBLGBQuantileEnsemble(BasePredictor):
             final_lgb_params["max_depth"] = lgb_max_depth
         if lgb_lr is not None:
             final_lgb_params["learning_rate"] = lgb_lr
+        if lgb_num_leaves is not None:
+            final_lgb_params["num_leaves"] = lgb_num_leaves
             
         self.lgb = lgb.LGBMRegressor(**final_lgb_params)
         
@@ -785,6 +792,7 @@ class LGBCatQuantileEnsemble(BasePredictor):
         lgb_n_estimators: Optional[int] = None,
         lgb_max_depth: Optional[int] = None,
         lgb_lr: Optional[float] = None,
+        lgb_num_leaves: Optional[int] = None,
         cat_n_estimators: Optional[int] = None,
         cat_max_depth: Optional[int] = None,
         cat_lr: Optional[float] = None,
@@ -828,6 +836,8 @@ class LGBCatQuantileEnsemble(BasePredictor):
             final_lgb_params["max_depth"] = lgb_max_depth
         if lgb_lr is not None:
             final_lgb_params["learning_rate"] = lgb_lr
+        if lgb_num_leaves is not None:
+            final_lgb_params["num_leaves"] = lgb_num_leaves
             
         self.lgb = lgb.LGBMRegressor(**final_lgb_params)
         
@@ -1122,4 +1132,558 @@ class XGBXGBQuantileEnsemble(BasePredictor):
         for key, value in params.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+        return self
+
+
+class LGBRFQuantileEnsemble(BasePredictor):
+    """
+    Ensemble regressor combining LightGBM quantile and RandomForest quantile.
+
+    Takes the maximum prediction across models and applies a safety factor.
+    """
+
+    def __init__(
+        self,
+        alpha: float = 0.95,
+        safety: float = 1.05,
+        lgb_params: Optional[Dict[str, Any]] = None,
+        rf_params: Optional[Dict[str, Any]] = None,
+        random_state: int = 42,
+        # convenience knobs
+        lgb_n_estimators: Optional[int] = None,
+        lgb_max_depth: Optional[int] = None,
+        lgb_lr: Optional[float] = None,
+        lgb_num_leaves: Optional[int] = None,
+        rf_n_estimators: Optional[int] = None,
+        rf_max_depth: Optional[int] = None,
+        rf_min_samples_leaf: Optional[int] = None,
+        **kwargs,
+    ):
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+
+        final_lgb_params = {
+            "objective": "quantile",
+            "alpha": alpha,
+            "verbose": -1,
+            "random_state": random_state,
+        }
+        if lgb_params:
+            final_lgb_params.update(lgb_params)
+        if lgb_n_estimators is not None:
+            final_lgb_params["n_estimators"] = lgb_n_estimators
+        if lgb_max_depth is not None:
+            final_lgb_params["max_depth"] = lgb_max_depth
+        if lgb_lr is not None:
+            final_lgb_params["learning_rate"] = lgb_lr
+        if lgb_num_leaves is not None:
+            final_lgb_params["num_leaves"] = lgb_num_leaves
+        self.lgb = lgb.LGBMRegressor(**final_lgb_params)
+
+        final_rf_params = {
+            "alpha": alpha,
+            "n_estimators": 400,
+            "max_depth": 6,
+            "min_samples_leaf": 1,
+            "random_state": random_state + 1,
+        }
+        if rf_params:
+            final_rf_params.update(rf_params)
+        if rf_n_estimators is not None:
+            final_rf_params["n_estimators"] = rf_n_estimators
+        if rf_max_depth is not None:
+            final_rf_params["max_depth"] = rf_max_depth
+        if rf_min_samples_leaf is not None:
+            final_rf_params["min_samples_leaf"] = rf_min_samples_leaf
+        self.rf = RandomForestQuantileRegressor(**final_rf_params)
+
+        self.columns = None
+
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+            missing = set(self.columns) - set(Xd.columns)
+            for c in missing:
+                Xd[c] = 0
+            Xd = Xd[self.columns]
+        return Xd.astype(float)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        Xd = self._encode(X, fit=True)
+        self.lgb.fit(Xd, y)
+        self.rf.fit(X, y)  # rf encodes internally again; safe and consistent
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        Xd = self._encode(X, fit=False)
+        p_lgb = self.lgb.predict(Xd)
+        p_rf = self.rf.predict(X)
+        return np.maximum(p_lgb, p_rf) * self.safety
+
+    def get_params(self) -> Dict[str, Any]:
+        try:
+            lp = self.lgb.get_params()
+        except Exception:
+            lp = {}
+        try:
+            rp = self.rf.get_params()
+        except Exception:
+            rp = {}
+        return {"alpha": self.alpha, "safety": self.safety, "random_state": self.random_state, "lgb_params": lp, "rf_params": rp}
+
+    def set_params(self, **params) -> "LGBRFQuantileEnsemble":
+        for k, v in params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        return self
+
+
+class XGBRFQuantileEnsemble(BasePredictor):
+    """
+    Ensemble regressor combining XGBoost quantile and RandomForest quantile.
+    """
+
+    def __init__(
+        self,
+        alpha: float = 0.95,
+        safety: float = 1.05,
+        xgb_params: Optional[Dict[str, Any]] = None,
+        rf_params: Optional[Dict[str, Any]] = None,
+        random_state: int = 42,
+        # xgb
+        xgb_n_estimators: Optional[int] = None,
+        xgb_max_depth: Optional[int] = None,
+        xgb_lr: Optional[float] = None,
+        # rf
+        rf_n_estimators: Optional[int] = None,
+        rf_max_depth: Optional[int] = None,
+        rf_min_samples_leaf: Optional[int] = None,
+        **kwargs,
+    ):
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+
+        final_xgb_params = {
+            "objective": "reg:quantileerror",
+            "quantile_alpha": alpha,
+            "n_jobs": 1,
+            "random_state": random_state,
+        }
+        if xgb_params:
+            final_xgb_params.update(xgb_params)
+        if xgb_n_estimators is not None:
+            final_xgb_params["n_estimators"] = xgb_n_estimators
+        if xgb_max_depth is not None:
+            final_xgb_params["max_depth"] = xgb_max_depth
+        if xgb_lr is not None:
+            final_xgb_params["learning_rate"] = xgb_lr
+        self.xgb = xgb.XGBRegressor(**final_xgb_params)
+
+        final_rf_params = {
+            "alpha": alpha,
+            "n_estimators": 400,
+            "max_depth": 6,
+            "min_samples_leaf": 1,
+            "random_state": random_state + 1,
+        }
+        if rf_params:
+            final_rf_params.update(rf_params)
+        if rf_n_estimators is not None:
+            final_rf_params["n_estimators"] = rf_n_estimators
+        if rf_max_depth is not None:
+            final_rf_params["max_depth"] = rf_max_depth
+        if rf_min_samples_leaf is not None:
+            final_rf_params["min_samples_leaf"] = rf_min_samples_leaf
+        self.rf = RandomForestQuantileRegressor(**final_rf_params)
+
+        self.columns = None
+
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+            missing = set(self.columns) - set(Xd.columns)
+            for c in missing:
+                Xd[c] = 0
+            Xd = Xd[self.columns]
+        return Xd.astype(float)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        Xd = self._encode(X, fit=True)
+        xgb_fit_params = {"verbose": False}
+        xgb_fit_params.update(fit_params)
+        self.xgb.fit(Xd, y, **xgb_fit_params)
+        self.rf.fit(X, y)
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        Xd = self._encode(X, fit=False)
+        p_xgb = self.xgb.predict(Xd)
+        p_rf = self.rf.predict(X)
+        return np.maximum(p_xgb, p_rf) * self.safety
+
+    def get_params(self) -> Dict[str, Any]:
+        try:
+            xp = self.xgb.get_params()
+        except Exception:
+            xp = {}
+        try:
+            rp = self.rf.get_params()
+        except Exception:
+            rp = {}
+        return {"alpha": self.alpha, "safety": self.safety, "random_state": self.random_state, "xgb_params": xp, "rf_params": rp}
+
+    def set_params(self, **params) -> "XGBRFQuantileEnsemble":
+        for k, v in params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        return self
+
+
+class RFRFQuantileEnsemble(BasePredictor):
+    """
+    Ensemble regressor combining two RandomForest quantile models.
+    """
+
+    def __init__(
+        self,
+        alpha: float = 0.95,
+        safety: float = 1.05,
+        random_state: int = 42,
+        # RF1
+        rf1_n_estimators: int = 300,
+        rf1_max_depth: Optional[int] = 6,
+        rf1_min_samples_leaf: int = 1,
+        # RF2
+        rf2_n_estimators: int = 500,
+        rf2_max_depth: Optional[int] = 8,
+        rf2_min_samples_leaf: int = 1,
+        **kwargs,
+    ):
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+
+        self.rf1 = RandomForestQuantileRegressor(
+            alpha=alpha,
+            n_estimators=rf1_n_estimators,
+            max_depth=rf1_max_depth,
+            min_samples_leaf=rf1_min_samples_leaf,
+            random_state=random_state,
+        )
+        self.rf2 = RandomForestQuantileRegressor(
+            alpha=alpha,
+            n_estimators=rf2_n_estimators,
+            max_depth=rf2_max_depth,
+            min_samples_leaf=rf2_min_samples_leaf,
+            random_state=random_state + 1,
+        )
+
+        self.columns = None
+
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+            missing = set(self.columns) - set(Xd.columns)
+            for c in missing:
+                Xd[c] = 0
+            Xd = Xd[self.columns]
+        return Xd.astype(float)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        # RF models encode internally; use original X
+        self.rf1.fit(X, y)
+        self.rf2.fit(X, y)
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        p1 = self.rf1.predict(X)
+        p2 = self.rf2.predict(X)
+        return np.maximum(p1, p2) * self.safety
+
+    def get_params(self) -> Dict[str, Any]:
+        try:
+            p1 = self.rf1.get_params()
+        except Exception:
+            p1 = {}
+        try:
+            p2 = self.rf2.get_params()
+        except Exception:
+            p2 = {}
+        return {"alpha": self.alpha, "safety": self.safety, "random_state": self.random_state, "rf1_params": p1, "rf2_params": p2}
+
+    def set_params(self, **params) -> "RFRFQuantileEnsemble":
+        for k, v in params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        return self
+
+
+class LGBLGBQuantileEnsemble(BasePredictor):
+    """
+    An ensemble regressor combining two LightGBM models with standard parameter ranges.
+    
+    Uses two LightGBM models with the same quantile level but different hyperparameters.
+    Takes the maximum prediction from both models and applies a safety factor.
+    """
+    
+    def __init__(
+        self,
+        alpha: float = 0.95,
+        safety: float = 1.05,
+        random_state: int = 42,
+        # First LGBM model params
+        lgb1_n_estimators: int = 300,
+        lgb1_max_depth: Optional[int] = 6,
+        lgb1_lr: float = 0.05,
+        lgb1_num_leaves: Optional[int] = None,
+        # Second LGBM model params
+        lgb2_n_estimators: int = 500,
+        lgb2_max_depth: Optional[int] = 8,
+        lgb2_lr: float = 0.03,
+        lgb2_num_leaves: Optional[int] = None,
+        **kwargs,
+    ):
+        """
+        Initialize the LightGBM + LightGBM Standard Quantile Ensemble Predictor.
+        
+        Args:
+            alpha: Quantile level for both models (default: 0.95)
+            safety: Safety multiplier applied to final predictions (default: 1.05)
+            random_state: Random state for reproducibility
+            lgb1_n_estimators: Number of estimators for first LightGBM model
+            lgb1_max_depth: Max depth for first LightGBM model (None to use LightGBM default)
+            lgb1_lr: Learning rate for first LightGBM model
+            lgb1_num_leaves: Num leaves for first LightGBM model (optional)
+            lgb2_n_estimators: Number of estimators for second LightGBM model
+            lgb2_max_depth: Max depth for second LightGBM model (None to use LightGBM default)
+            lgb2_lr: Learning rate for second LightGBM model
+            lgb2_num_leaves: Num leaves for second LightGBM model (optional)
+            **kwargs: Additional parameters (ignored gracefully)
+        """
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+
+        # First LightGBM model
+        lgb1_params = {
+            "objective": "quantile",
+            "alpha": alpha,
+            "n_estimators": lgb1_n_estimators,
+            "learning_rate": lgb1_lr,
+            "verbose": -1,
+            "random_state": random_state,
+        }
+        if lgb1_max_depth is not None:
+            lgb1_params["max_depth"] = lgb1_max_depth
+        if lgb1_num_leaves is not None:
+            lgb1_params["num_leaves"] = lgb1_num_leaves
+        self.lgb1 = lgb.LGBMRegressor(**lgb1_params)
+
+        # Second LightGBM model
+        lgb2_params = {
+            "objective": "quantile",
+            "alpha": alpha,
+            "n_estimators": lgb2_n_estimators,
+            "learning_rate": lgb2_lr,
+            "verbose": -1,
+            "random_state": random_state + 1,
+        }
+        if lgb2_max_depth is not None:
+            lgb2_params["max_depth"] = lgb2_max_depth
+        if lgb2_num_leaves is not None:
+            lgb2_params["num_leaves"] = lgb2_num_leaves
+        self.lgb2 = lgb.LGBMRegressor(**lgb2_params)
+
+        # Store column information for consistent encoding
+        self.columns = None
+
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """
+        One-hot encode categorical features and align columns.
+        """
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+            missing_cols = set(self.columns) - set(Xd.columns)
+            for col in missing_cols:
+                Xd[col] = 0
+            Xd = Xd[self.columns]
+        return Xd.astype(float)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        """Fit both underlying LightGBM regressors on the training data."""
+        Xd = self._encode(X, fit=True)
+        self.lgb1.fit(Xd, y)
+        self.lgb2.fit(Xd, y)
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict by taking the maximum of both models and applying safety factor."""
+        Xd = self._encode(X, fit=False)
+        p1 = self.lgb1.predict(Xd)
+        p2 = self.lgb2.predict(Xd)
+        return np.maximum(p1, p2) * self.safety
+
+    def get_params(self) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            lgb1_params = self.lgb1.get_params() if hasattr(self.lgb1, "get_params") else {}
+        except Exception:
+            lgb1_params = {}
+        try:
+            lgb2_params = self.lgb2.get_params() if hasattr(self.lgb2, "get_params") else {}
+        except Exception:
+            lgb2_params = {}
+        return {
+            "alpha": self.alpha,
+            "safety": self.safety,
+            "random_state": self.random_state,
+            "lgb1_params": lgb1_params,
+            "lgb2_params": lgb2_params,
+        }
+
+    def set_params(self, **params) -> "LGBLGBQuantileEnsemble":
+        for k, v in params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        return self
+
+
+class CatCatQuantileEnsemble(BasePredictor):
+    """
+    An ensemble regressor combining two CatBoost models with standard parameter ranges.
+    
+    Uses two CatBoost models with the same quantile level but different hyperparameters.
+    Takes the maximum prediction from both models and applies a safety factor.
+    """
+
+    def __init__(
+        self,
+        alpha: float = 0.95,
+        safety: float = 1.05,
+        random_state: int = 42,
+        # First CatBoost model params
+        cat1_iterations: int = 300,
+        cat1_depth: int = 6,
+        cat1_lr: float = 0.05,
+        # Second CatBoost model params
+        cat2_iterations: int = 500,
+        cat2_depth: int = 8,
+        cat2_lr: float = 0.03,
+        **kwargs,
+    ):
+        """
+        Initialize the CatBoost + CatBoost Standard Quantile Ensemble Predictor.
+
+        Args:
+            alpha: Quantile level for both models (default: 0.95)
+            safety: Safety multiplier applied to final predictions (default: 1.05)
+            random_state: Random state for reproducibility
+            cat1_iterations: Iterations for first CatBoost model
+            cat1_depth: Max depth for first CatBoost model
+            cat1_lr: Learning rate for first CatBoost model
+            cat2_iterations: Iterations for second CatBoost model
+            cat2_depth: Max depth for second CatBoost model
+            cat2_lr: Learning rate for second CatBoost model
+            **kwargs: Additional parameters (ignored gracefully)
+        """
+        self.alpha = alpha
+        self.safety = safety
+        self.random_state = random_state
+
+        # First CatBoost model
+        self.cat1 = cat.CatBoostRegressor(
+            loss_function=f"Quantile:alpha={alpha}",
+            iterations=cat1_iterations,
+            depth=cat1_depth,
+            learning_rate=cat1_lr,
+            verbose=False,
+            random_state=random_state,
+        )
+
+        # Second CatBoost model
+        self.cat2 = cat.CatBoostRegressor(
+            loss_function=f"Quantile:alpha={alpha}",
+            iterations=cat2_iterations,
+            depth=cat2_depth,
+            learning_rate=cat2_lr,
+            verbose=False,
+            random_state=random_state + 1,
+        )
+
+        # Store column information for consistent encoding
+        self.columns = None
+
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """One-hot encode categorical features and align columns."""
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+            missing_cols = set(self.columns) - set(Xd.columns)
+            for col in missing_cols:
+                Xd[col] = 0
+            Xd = Xd[self.columns]
+        return Xd.astype(float)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        """Fit both underlying CatBoost regressors on the training data."""
+        Xd = self._encode(X, fit=True)
+        self.cat1.fit(Xd, y)
+        self.cat2.fit(Xd, y)
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Predict by taking the maximum of both models and applying safety factor."""
+        Xd = self._encode(X, fit=False)
+        p1 = self.cat1.predict(Xd)
+        p2 = self.cat2.predict(Xd)
+        return np.maximum(p1, p2) * self.safety
+
+    def get_params(self) -> Dict[str, Any]:
+        """Get model parameters."""
+        try:
+            cat1_params = self.cat1.get_params() if hasattr(self.cat1, "get_params") else {}
+        except Exception:
+            cat1_params = {}
+        try:
+            cat2_params = self.cat2.get_params() if hasattr(self.cat2, "get_params") else {}
+        except Exception:
+            cat2_params = {}
+        return {
+            "alpha": self.alpha,
+            "safety": self.safety,
+            "random_state": self.random_state,
+            "cat1_params": cat1_params,
+            "cat2_params": cat2_params,
+        }
+
+    def set_params(self, **params) -> "CatCatQuantileEnsemble":
+        for k, v in params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
         return self

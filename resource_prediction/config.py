@@ -10,10 +10,16 @@ from resource_prediction.models import (
     GBXGBQuantileEnsemble,
     LGBCatQuantileEnsemble,
     LGBXGBQuantileEnsemble,
+    LGBLGBQuantileEnsemble,
+    CatCatQuantileEnsemble,
+    LGBRFQuantileEnsemble,
+    XGBRFQuantileEnsemble,
+    RFRFQuantileEnsemble,
     LightGBMClassifier,
     LightGBMRegressor,
     LogisticRegression,
     RandomForestClassifier,
+    RandomForestQuantileRegressor,
     SizeyPredictor,
     XGBCatQuantileEnsemble,
     XGBoostClassifier,
@@ -121,6 +127,36 @@ class Config:
             "base_model": "xgb_xgb_quantile_ensemble",
             "class": XGBXGBQuantileEnsemble,
         },
+        "lgb_rf_ensemble": {
+            "type": "regression",
+            "base_model": "lgb_rf_quantile_ensemble",
+            "class": LGBRFQuantileEnsemble,
+        },
+        "xgb_rf_ensemble": {
+            "type": "regression",
+            "base_model": "xgb_rf_quantile_ensemble",
+            "class": XGBRFQuantileEnsemble,
+        },
+        "rf_rf_ensemble": {
+            "type": "regression",
+            "base_model": "rf_rf_quantile_ensemble",
+            "class": RFRFQuantileEnsemble,
+        },
+        "rf_quantile_regression": {
+            "type": "regression",
+            "base_model": "random_forest_quantile",
+            "class": RandomForestQuantileRegressor,
+        },
+        "lgb_lgb_ensemble": {
+            "type": "regression",
+            "base_model": "lgb_lgb_quantile_ensemble",
+            "class": LGBLGBQuantileEnsemble,
+        },
+        "cat_cat_ensemble": {
+            "type": "regression",
+            "base_model": "cat_cat_quantile_ensemble",
+            "class": CatCatQuantileEnsemble,
+        },
         "xgboost_classification": {
             "type": "classification",
             "base_model": "xgboost",
@@ -164,122 +200,65 @@ class Config:
     HYPERPARAMETER_CONFIGS = {
         # GradientBoosting + XGBoost Ensemble for Quantile Regression (standard QE)
         "gb_xgb_ensemble": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "gb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "gb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
-            "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "xgb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
+            "gb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "gb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "gb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
         },
         # LightGBM + XGBoost Ensemble
         "lgb_xgb_ensemble": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "lgb_num_leaves": {"min": 15, "max": 100, "type": "int", "default": 31},
-            "lgb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
-            "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "xgb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
+            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
         },
         # GradientBoosting + LightGBM Ensemble
         "gb_lgb_ensemble": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "gb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "gb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "gb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
-            "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "lgb_num_leaves": {"min": 15, "max": 100, "type": "int", "default": 31},
-            "lgb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
+            "gb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "gb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "gb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
         },
         # XGBoost + CatBoost Ensemble
         "xgb_cat_ensemble": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "xgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "xgb_max_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "xgb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
-            "cat_iterations": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "cat_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "cat_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
+            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "cat_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
+            "cat_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "cat_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
         },
         # LightGBM + CatBoost Ensemble
         "lgb_cat_ensemble": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "lgb_n_estimators": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "lgb_num_leaves": {"min": 15, "max": 100, "type": "int", "default": 31},
-            "lgb_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
-            "cat_iterations": {"min": 200, "max": 700, "type": "int", "default": 300},
-            "cat_depth": {"min": 3, "max": 9, "type": "int", "default": 6},
-            "cat_lr": {
-                "min": 0.01,
-                "max": 0.15,
-                "type": "float",
-                "log": True,
-                "default": 0.05,
-            },
+            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "cat_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
+            "cat_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "cat_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
         },
         # XGBoost + XGBoost Ensemble (standard ranges like other ensembles)
         "xgb_xgb_ensemble": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             # First XGBoost model parameters
             "xgb1_n_estimators": {
@@ -312,18 +291,92 @@ class Config:
                 "default": 0.1,
             },
         },
+        # LightGBM + RandomForest Quantile Ensemble
+        "lgb_rf_ensemble": {
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # LightGBM
+            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+            # RandomForest Quantile
+            "rf_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "rf_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
+            "rf_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
+        },
+        # XGBoost + RandomForest Quantile Ensemble
+        "xgb_rf_ensemble": {
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # XGBoost
+            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            # RandomForest Quantile
+            "rf_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "rf_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
+            "rf_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
+        },
+        # RandomForest + RandomForest Quantile Ensemble
+        "rf_rf_ensemble": {
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # RF1
+            "rf1_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "rf1_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
+            "rf1_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
+            # RF2
+            "rf2_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "rf2_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
+            "rf2_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
+        },
+        # RandomForest Quantile Regression (single model)
+        "rf_quantile_regression": {
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 500},
+            "max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
+            "min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
+        },
+        # LightGBM + LightGBM Ensemble (two diverse LightGBM learners)
+        "lgb_lgb_ensemble": {
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # First LGBM model parameters
+            "lgb1_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb1_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "lgb1_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb1_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+            # Second LGBM model parameters
+            "lgb2_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb2_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "lgb2_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb2_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+        },
+        # CatBoost + CatBoost Ensemble (two diverse CatBoost learners)
+        "cat_cat_ensemble": {
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
+            # First CatBoost model parameters
+            "cat1_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
+            "cat1_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "cat1_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            # Second CatBoost model parameters
+            "cat2_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
+            "cat2_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
+            "cat2_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+        },
         # XGBoost Regression - only XGBoost regression parameters
         "xgboost_regression": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
-            "n_estimators": {"min": 200, "max": 800, "type": "int", "default": 400},
-            "max_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-            "learning_rate": {
-                "min": 0.01,
-                "max": 0.2,
-                "type": "float",
-                "log": True,
-                "default": 0.1,
-            },
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 500},
+            "max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "learning_rate": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "subsample": {"min": 0.6, "max": 1.0, "type": "float", "default": 0.8},
+            "colsample_bytree": {"min": 0.6, "max": 1.0, "type": "float", "default": 0.8},
+            "min_child_weight": {"min": 0.1, "max": 10.0, "type": "float", "log": True, "default": 1.0},
+            "reg_lambda": {"min": 0.0, "max": 20.0, "type": "float", "default": 1.0},
+            "reg_alpha": {"min": 0.0, "max": 5.0, "type": "float", "default": 0.0},
         },
         # XGBoost Classification - only XGBoost classification parameters
         "xgboost_classification": {
@@ -350,17 +403,11 @@ class Config:
         },
         # LightGBM Regression - only LightGBM regression parameters
         "lightgbm_regression": {
-            "alpha": {"choices": [0.90, 0.95, 0.98, 0.99], "default": 0.95},
-            "n_estimators": {"min": 100, "max": 700, "type": "int", "default": 400},
-            "num_leaves": {"min": 20, "max": 60, "type": "int", "default": 31},
-            "learning_rate": {
-                "min": 0.01,
-                "max": 0.2,
-                "type": "float",
-                "log": True,
-                "default": 0.1,
-            },
-            # max_depth is optional for LightGBM, not included by default
+            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
+            "n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 500},
+            "num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
+            "max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
+            "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
         },
         # LightGBM Classification - only LightGBM classification parameters
         "lightgbm_classification": {

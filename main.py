@@ -54,7 +54,8 @@ def main(args):
     # We now treat lgb_xgb_ensemble as the standard/default QE architecture.
     experimental_qe_ensembles = [
         'gb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
-        'xgb_xgb_ensemble'
+        'xgb_xgb_ensemble', 'lgb_lgb_ensemble', 'cat_cat_ensemble',
+        'lgb_rf_ensemble', 'xgb_rf_ensemble', 'rf_rf_ensemble'
     ]
     all_qe_models = ['lgb_xgb_ensemble'] + experimental_qe_ensembles
 

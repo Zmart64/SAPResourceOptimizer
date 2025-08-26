@@ -2,7 +2,10 @@
 
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier as SKRandomForestClassifier
+from sklearn.ensemble import (
+    RandomForestClassifier as SKRandomForestClassifier,
+    RandomForestRegressor as SKRandomForestRegressor,
+)
 from sklearn.linear_model import LogisticRegression as SKLogisticRegression
 from sklearn.cluster import KMeans
 from typing import Dict, Any
@@ -278,4 +281,94 @@ class LogisticRegression(BasePredictor):
             'n_bins': self.n_bins,
             'strategy': self.strategy
         })
+        return params
+
+
+class RandomForestQuantileRegressor(BasePredictor):
+    """
+    Quantile Random Forest regressor.
+
+    Trains a standard RandomForestRegressor and estimates conditional quantiles
+    at prediction time using the distribution of training targets in the leaves
+    reached by the input sample across all trees.
+    """
+
+    def __init__(
+        self,
+        alpha: float = 0.95,
+        n_estimators: int = 400,
+        max_depth: int | None = 6,
+        min_samples_leaf: int = 1,
+        random_state: int = 42,
+        **kwargs,
+    ):
+        self.alpha = alpha
+        self.random_state = random_state
+        rf_params = {
+            "n_estimators": n_estimators,
+            "max_depth": max_depth,
+            "min_samples_leaf": min_samples_leaf,
+            "random_state": random_state,
+            "n_jobs": 1,
+        }
+        rf_params.update(kwargs)
+        self.model = SKRandomForestRegressor(**rf_params)
+        self.columns = None
+        self._leaf_y_maps = None  # list[dict[int, np.ndarray]] per tree
+
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False).astype(float)
+        if fit:
+            self.columns = Xd.columns.tolist()
+        else:
+            if self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+            missing = set(self.columns) - set(Xd.columns)
+            for c in missing:
+                Xd[c] = 0
+            Xd = Xd[self.columns]
+        return Xd
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
+        Xd = self._encode(X, fit=True)
+        self.model.fit(Xd, y, **fit_params)
+
+        # Build leaf -> y mapping for each tree using training data
+        self._leaf_y_maps = []
+        y_values = y.to_numpy()
+        for est in self.model.estimators_:
+            leaves = est.apply(Xd)
+            mapping: dict[int, list[float]] = {}
+            for leaf_id, target in zip(leaves, y_values):
+                mapping.setdefault(int(leaf_id), []).append(float(target))
+            # Convert to sorted numpy arrays for fast quantile
+            mapping_np = {lid: np.sort(np.asarray(vals, dtype=float)) for lid, vals in mapping.items()}
+            self._leaf_y_maps.append(mapping_np)
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        if self._leaf_y_maps is None:
+            raise ValueError("Model must be fitted before making predictions")
+        Xd = self._encode(X, fit=False)
+        preds = np.zeros(len(Xd), dtype=float)
+        # For each sample, collect all leaf y's across trees and take alpha-quantile
+        for i in range(len(Xd)):
+            vals = []
+            x_row = Xd.iloc[[i]]  # keep 2D
+            for est, leaf_map in zip(self.model.estimators_, self._leaf_y_maps):
+                leaf_id = int(est.apply(x_row)[0])
+                arr = leaf_map.get(leaf_id)
+                if arr is not None and arr.size:
+                    # extend with numpy array values
+                    vals.append(arr)
+            if len(vals) == 0:
+                # Fallback to RF mean prediction if no leaves found (shouldn't happen)
+                preds[i] = float(self.model.predict(x_row)[0])
+            else:
+                all_vals = np.concatenate(vals)
+                preds[i] = float(np.quantile(all_vals, self.alpha))
+        return preds
+
+    def get_params(self) -> Dict[str, Any]:
+        params = self.model.get_params()
+        params.update({"alpha": self.alpha})
         return params
