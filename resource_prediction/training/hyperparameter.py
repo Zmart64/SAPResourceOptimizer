@@ -204,10 +204,17 @@ class OptunaOptimizer:
                     load_if_exists=True,
                 )
 
-            completed_trials = len(
-                [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+            # Count all finished trials (COMPLETE, PRUNED, FAIL) to align with
+            # Optuna's n_trials semantics across restarts.
+            finished_states = (
+                optuna.trial.TrialState.COMPLETE,
+                optuna.trial.TrialState.PRUNED,
+                optuna.trial.TrialState.FAIL,
             )
-            remaining_trials = self.config.N_CALLS_PER_FAMILY - completed_trials
+            finished_trials = len(
+                [t for t in study.trials if t.state in finished_states]
+            )
+            remaining_trials = self.config.N_CALLS_PER_FAMILY - finished_trials
 
             if remaining_trials > 0:
                 print(
@@ -221,7 +228,7 @@ class OptunaOptimizer:
                 )
             else:
                 print(
-                    f"Skipping {family_name.upper()} – already optimised with {completed_trials} trials."
+                    f"Skipping {family_name.upper()} – already optimised with {finished_trials} finished trials."
                 )
 
             all_studies.append(study)
