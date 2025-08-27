@@ -12,14 +12,10 @@ from resource_prediction.models import (
     LGBXGBQuantileEnsemble,
     LGBLGBQuantileEnsemble,
     CatCatQuantileEnsemble,
-    LGBRFQuantileEnsemble,
-    XGBRFQuantileEnsemble,
-    RFRFQuantileEnsemble,
     LightGBMClassifier,
     LightGBMRegressor,
     LogisticRegression,
     RandomForestClassifier,
-    RandomForestQuantileRegressor,
     SizeyPredictor,
     XGBCatQuantileEnsemble,
     XGBoostClassifier,
@@ -127,26 +123,7 @@ class Config:
             "base_model": "xgb_xgb_quantile_ensemble",
             "class": XGBXGBQuantileEnsemble,
         },
-        "lgb_rf_ensemble": {
-            "type": "regression",
-            "base_model": "lgb_rf_quantile_ensemble",
-            "class": LGBRFQuantileEnsemble,
-        },
-        "xgb_rf_ensemble": {
-            "type": "regression",
-            "base_model": "xgb_rf_quantile_ensemble",
-            "class": XGBRFQuantileEnsemble,
-        },
-        "rf_rf_ensemble": {
-            "type": "regression",
-            "base_model": "rf_rf_quantile_ensemble",
-            "class": RFRFQuantileEnsemble,
-        },
-        "rf_quantile_regression": {
-            "type": "regression",
-            "base_model": "random_forest_quantile",
-            "class": RandomForestQuantileRegressor,
-        },
+        
         "lgb_lgb_ensemble": {
             "type": "regression",
             "base_model": "lgb_lgb_quantile_ensemble",
@@ -291,53 +268,7 @@ class Config:
                 "default": 0.1,
             },
         },
-        # LightGBM + RandomForest Quantile Ensemble
-        "lgb_rf_ensemble": {
-            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
-            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            # LightGBM
-            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
-            "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
-            # RandomForest Quantile
-            "rf_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
-            "rf_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
-            "rf_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
-        },
-        # XGBoost + RandomForest Quantile Ensemble
-        "xgb_rf_ensemble": {
-            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
-            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            # XGBoost
-            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
-            "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
-            # RandomForest Quantile
-            "rf_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
-            "rf_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
-            "rf_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
-        },
-        # RandomForest + RandomForest Quantile Ensemble
-        "rf_rf_ensemble": {
-            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
-            "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            # RF1
-            "rf1_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
-            "rf1_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
-            "rf1_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
-            # RF2
-            "rf2_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
-            "rf2_max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
-            "rf2_min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
-        },
-        # RandomForest Quantile Regression (single model)
-        "rf_quantile_regression": {
-            "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
-            "n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 500},
-            "max_depth": {"min": 3, "max": 20, "type": "int", "default": 8},
-            "min_samples_leaf": {"min": 1, "max": 20, "type": "int", "default": 1},
-        },
+        
         # LightGBM + LightGBM Ensemble (two diverse LightGBM learners)
         "lgb_lgb_ensemble": {
             "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},

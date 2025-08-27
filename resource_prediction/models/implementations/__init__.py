@@ -14,12 +14,9 @@ from .quantile_ensemble_variants import (
     XGBXGBQuantileEnsemble,
     LGBLGBQuantileEnsemble,
     CatCatQuantileEnsemble,
-    LGBRFQuantileEnsemble,
-    XGBRFQuantileEnsemble,
-    RFRFQuantileEnsemble,
 )
 from .sizey_model import SizeyPredictor
-from .sklearn_models import LogisticRegression, RandomForestClassifier, RandomForestQuantileRegressor
+from .sklearn_models import LogisticRegression, RandomForestClassifier
 from .xgboost_models import XGBoostClassifier, XGBoostRegressor
 
 __all__ = [
@@ -31,15 +28,12 @@ __all__ = [
     "XGBXGBQuantileEnsemble",
     "LGBLGBQuantileEnsemble",
     "CatCatQuantileEnsemble",
-    "LGBRFQuantileEnsemble",
-    "XGBRFQuantileEnsemble",
-    "RFRFQuantileEnsemble",
+    
     "XGBoostRegressor",
     "XGBoostClassifier",
     "LightGBMRegressor",
     "LightGBMClassifier",
     "RandomForestClassifier",
-    "RandomForestQuantileRegressor",
     "LogisticRegression",
     "SizeyPredictor",
 ]
