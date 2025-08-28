@@ -97,7 +97,7 @@ Execute the full pipeline for a specific task type:
 
 .. code-block:: console
 
-   python main.py --model-type classification --run-search
+   python main.py --task-type classification --run-search
 
 Subsequent runs
 ---------------
@@ -106,7 +106,7 @@ To reuse previously processed data and run a different task type:
 
 .. code-block:: console
 
-   python main.py --model-type regression --skip-preprocessing --run-search
+   python main.py --task-type regression --skip-preprocessing --run-search
 
 Command line options
 --------------------
@@ -302,29 +302,10 @@ Add search space configuration to enable hyperparameter optimization:
            }
            return {**common_params, **model_params} if task_type == 'classification' else model_params
 
-**Step 5: Add Trainer Integration**
+**Step 5: No Trainer Changes Needed**
 
-Update the trainer to handle your new model type:
-
-.. code-block:: python
-
-   # resource_prediction/training/trainer.py - Add to _evaluate_single_champion()
-   
-   # For regression models (around line 330):
-   elif base_model_name == 'my_new_model':
-       from resource_prediction.models.my_new_model import MyNewModel
-       model = MyNewModel(
-           task_type='regression',
-           **best_params
-       )
-
-   # For classification models (around line 360):
-   elif base_model_name == 'my_new_model':
-       from resource_prediction.models.my_new_model import MyNewModel
-       model = MyNewModel(
-           task_type='classification',
-           **best_params
-       )
+The trainer dynamically instantiates models using each family’s configured class reference in
+``Config.MODEL_FAMILIES``. No changes to trainer code are required.
 
 **Step 6: Test Your Integration**
 
@@ -439,67 +420,31 @@ This will generate performance comparisons and help select the best model for de
 Interactive Web Application
 ---------------------------
 
-The project includes a unified Streamlit-based web application for interactive model exploration and real-time prediction.
-
-**Main Application**
+The project includes a unified Streamlit application for interactive model exploration and prediction.
 
 .. code-block:: console
 
    # Launch the main application
    streamlit run app/app.py
 
-The main application provides a comprehensive interface with:
+The app provides:
 
-- **Model Selection**: Radio button interface to choose between 4 different models:
-  
-  - **Classification** - XGBoost uncertainty model  
-  - **Quantile Ensemble** - Three variants:
-    
-    - Balanced Approach
-    - Tiny Under Allocation (optimized for failure prevention)
-    - Small Memory Waste (optimized for efficiency)
+- **Model selection** in the sidebar via a curated registry of models
+- **Interactive predictions** over simulation data with live charts
+- **Adjustable speed** of the simulation loop and classification overlays
 
-- **Interactive Prediction**: Real-time memory prediction using simulation data
-- **Visualization**: Live charts showing prediction behavior over time
-- **Simulation Mode**: Automatic batch processing with configurable delay between predictions
-- **Model-Specific Interfaces**: Each model type has optimized display and interaction patterns
-
-**Application Architecture**
-
-The application uses a modular design:
+Application layout:
 
 .. code-block:: text
 
    app/
-   ├── app.py                     # Main Streamlit application
-   ├── utils.py                   # Shared utilities
-   ├── qe/                        # Quantile ensemble helper functions
-   │   ├── app_qe.py             # QE-specific functions (not standalone)
-   │   └── simulation_data.csv    # QE simulation data
-   └── classification/            # Classification helper functions  
-       ├── app_classification.py  # Classification functions (not standalone)
-       └── *.csv                 # Classification test data
+   ├── app.py          # Main Streamlit application
+   ├── utils.py        # UI setup and simulation helpers
+   └── data_loader.py  # Simulation data loading utilities
 
-The main ``app.py`` imports functions from the helper modules and dynamically calls the appropriate one based on user selection:
-
-.. code-block:: python
-
-   # Main app imports helper functions
-   from classification.app_classification import run_classification
-   
-   # Calls appropriate function based on model selection
-   if model_choice == "Classification":
-       run_classification(model_path)
-   elif model_choice in quantile_ensemble_models:
-       run_qe(model_path)  # Defined in main app
-
-**Features**
-
-- **Real-time Prediction**: Memory prediction with live updates
-- **Model Comparison**: Easy switching between different approaches
-- **Simulation Visualization**: Charts showing prediction behavior
-- **Configurable Speed**: Adjustable delay between predictions
-- **Model-Specific UI**: Optimized interface for each model type
+Models are wired in via the ``available_models`` dictionary in ``app/app.py`` that maps display names to
+paths of serialized models (.pkl) under ``artifacts/``. The app uses ``DeployableModel``’s ``load()`` and
+``predict()`` methods, so preprocessing is applied automatically.
 
 **Trained Model Artifacts**
 
@@ -507,13 +452,60 @@ Pre-trained models are organized in the ``artifacts/trained_models/`` directory:
 
 .. code-block:: text
 
-   artifacts/trained_models/
-   ├── app/                           # Models for web applications
-   │   ├── qe/                        # Quantile ensemble variants
-   │   │   ├── qe_balanced.pkl        # Balanced accuracy/efficiency
-   │   │   ├── qe_small_waste.pkl     # Optimized for minimal waste
-   │   │   └── qe_tiny_under_alloc.pkl # Optimized for failure prevention
-   │   └── classification/            # Classification models
-   └── resource_prediction/           # Models from training pipeline
+   artifacts/
+   ├── trained_models/
+   │   ├── lightgbm_classification.pkl
+   │   ├── xgboost_classification.pkl
+   │   ├── lightgbm_regression.pkl
+   │   └── xgboost_regression.pkl
+   └── pareto/models/
+       ├── qe_balanced.pkl
+       ├── qe_low_waste.pkl
+       └── qe_low_underallocation.pkl
 
-These applications demonstrate how to use the trained models in production-like scenarios and provide tools for stakeholders to understand model behavior without running the full training pipeline.
+These artifacts demonstrate using trained models in production-like scenarios and enable exploration without running the full training pipeline.
+
+Quantile Ensemble Defaults
+--------------------------
+
+This repository supports multiple Quantile Ensemble (QE) variants (e.g., LGB+XGB, GB+LGB, XGB+XGB, etc.). In practice, hold‑out performance among these ensembles is very similar. To keep runs fast and the code path simple, only a single, well‑performing QE is active by default:
+
+- Default QE: ``lgb_xgb_ensemble`` (LightGBM + XGBoost)
+- Other QE variants are considered experimental and are excluded by default
+
+Include all QE variants by either:
+
+- Passing ``--run-all-qe-models``
+- Or explicitly listing the families with ``--model-families`` (e.g., ``gb_lgb_ensemble xgb_xgb_ensemble``)
+
+This mirrors ``main.py`` behavior: without filters, all non‑experimental families plus the default QE run; with the flag, all QEs are added.
+
+Pareto Tools
+------------
+
+Utilities for analyzing and exporting Pareto‑optimal QE configurations are available under
+``resource_prediction/pareto/`` with a simple CLI:
+
+.. code-block:: console
+
+   # Analyze frontier, plot a focused chart, and export key models
+   python -m resource_prediction.pareto.cli all
+
+   # Or run individually
+   python -m resource_prediction.pareto.cli analyze
+   python -m resource_prediction.pareto.cli plot
+   python -m resource_prediction.pareto.cli export
+
+Artifacts are written under ``artifacts/pareto/`` (frontier CSVs, focused plot, exported models).
+
+Prerequisites and considerations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``export`` requires a saved deployable champion for ``lgb_xgb_ensemble`` at
+  ``artifacts/trained_models/lgb_xgb_ensemble.pkl``. Create it by running the main pipeline with
+  ``--save-models`` (for example: ``python main.py --run-search --task-type regression --save-models``).
+- ``sweep`` (frontier generation) needs preprocessed data. It will reuse tuned hyperparameters for
+  ``lgb_xgb_ensemble`` from ``artifacts/experiments/regression_results.csv`` if present; otherwise it
+  falls back to safe defaults.
+- ``analyze`` and ``plot`` expect existing frontier CSVs under ``artifacts/pareto/results/``.
+  Run ``pareto sweep`` first to (re)generate them.

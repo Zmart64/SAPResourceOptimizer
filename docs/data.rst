@@ -46,11 +46,8 @@ Key raw columns include:
 Feature Engineering Pipeline
 ----------------------------
 
-Feature Engineering Pipeline
-----------------------------
-
 The :class:`resource_prediction.data_processing.preprocessor.DataPreprocessor`
-module derives a rich set of temporal, categorical and rolling window
+derives a rich set of temporal, categorical and rolling window
 features from these raw columns. These engineered features feed the
 training and evaluation pipeline documented in :doc:`api`.
 
@@ -70,13 +67,15 @@ training and evaluation pipeline documented in :doc:`api`.
 - ``heavy_target_flag`` – Binary indicator for memory-intensive targets
 - ``high_parallelism`` – Flag for highly parallel build configurations
 
-**Target Variable Processing**:
+Target Variable Processing
+--------------------------
 
 - Raw ``max_rss`` (bytes) → ``max_rss_gb`` (gigabytes)
 - Time-series split: 90% training, 10% holdout testing
 - For classification: Dynamic quantile binning to handle varying memory distributions
 
-**Data Quality Considerations**:
+Data Quality Considerations
+---------------------------
 
 - Handles missing values and outliers in preprocessing
 - Respects temporal ordering for cross-validation splits

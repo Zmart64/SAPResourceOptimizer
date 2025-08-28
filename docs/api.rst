@@ -35,7 +35,27 @@ DeployableModel Wrapper
 Model Implementations
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: resource_prediction.models.quantile_ensemble
+.. automodule:: resource_prediction.models.implementations.lightgbm_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.models.implementations.xgboost_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.models.implementations.sklearn_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.models.implementations.quantile_ensemble_variants
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.models.implementations.sizey_model
    :members:
    :undoc-members:
    :show-inheritance:
@@ -43,7 +63,16 @@ Model Implementations
 Preprocessing Pipeline
 ----------------------
 
+Model-time preprocessing used by DeployableModel:
+
 .. automodule:: resource_prediction.preprocessing
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Training-time data preprocessing and feature engineering:
+
+.. automodule:: resource_prediction.data_processing.preprocessor
    :members:
    :undoc-members:
    :show-inheritance:
@@ -61,12 +90,45 @@ Training
    :undoc-members:
    :show-inheritance:
 
-Web Applications
-----------------
+Reporting
+---------
 
-Interactive Streamlit applications for model exploration and prediction.
+.. automodule:: resource_prediction.reporting
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-.. automodule:: app
+Pareto Tools
+------------
+
+Utilities for generating and using a Pareto frontier of LGB+XGB Quantile Ensemble configurations:
+
+.. automodule:: resource_prediction.pareto.core
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.pareto.plot
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.pareto.export_models
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. automodule:: resource_prediction.pareto.cli
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Web Application
+---------------
+
+Interactive Streamlit application for model exploration and prediction.
+
+.. automodule:: app.app
    :members:
    :undoc-members:
    :show-inheritance:

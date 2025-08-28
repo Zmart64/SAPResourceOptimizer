@@ -54,30 +54,7 @@ print(f"Model: {model_info['model_type']} ({model_info['task_type']})")
 
 ### Documentation
 
-Full project documentation is available in the `docs/` directory. To build and view the documentation locally:
-
-```console
-# Build the documentation
-make html
-
-# Build and serve the documentation (auto-opens in browser)
-make serve
-
-# For development: clean, build, and serve
-make dev
-```
-```
-
-**Benefits of DeployableModel Architecture:**
--  **Unified Interface** - All models implement `BasePredictor` for consistency
--  **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
--  **Production Ready** - Complete serialization with metadata and preprocessing pipeline
--  **Extensible Design** - Easy to add new models following the same pattern
--  **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
-
-### Documentation
-
-Full project documentation is available in the `docs/` directory. To build and view the documentation locally:
+Full project documentation is available in the `docs/` directory. To build and view locally:
 
 ```console
 # Build the documentation
@@ -92,12 +69,23 @@ make dev
 
 The documentation will be available at `http://localhost:8000` and should automatically open in your browser.
 
-**Alternative manual commands:**
+Alternatively:
+
 ```console
-# If you prefer manual commands
 poetry run sphinx-build -b html docs docs/_build/html
 poetry run python serve_docs.py
 ```
+
+**Benefits of DeployableModel Architecture:**
+-  **Unified Interface** - All models implement `BasePredictor` for consistency
+-  **Integrated Preprocessing** - `ModelPreprocessor` handles feature engineering automatically
+-  **Production Ready** - Complete serialization with metadata and preprocessing pipeline
+-  **Extensible Design** - Easy to add new models following the same pattern
+-  **Clean Architecture** - Consistent parameter handling throughout hyperparameter search and evaluation
+
+## Documentation
+
+See the full docs in `docs/`. Build with `make html` or use `make serve` to host locally.
 
 ## Imagined "how to use" workflow
 
@@ -183,6 +171,15 @@ python main.py --run-search --model-families lightgbm_regression
 - **Interactive Web Applications**: Streamlit-based dashboards for model exploration
 - **Production-Ready**: Poetry dependency management, comprehensive testing, and documentation
 
+### Quantile Ensemble Defaults
+
+Multiple Quantile Ensemble (QE) variants are implemented (e.g., LGB+XGB, GB+LGB, XGB+XGB, Cat+Cat). On hold‑out data, these ensembles perform very similarly. To keep default runs fast and focused, only a single QE variant is active by default:
+
+- Default QE: `lgb_xgb_ensemble` (LightGBM + XGBoost)
+- Other QE variants are treated as experimental by default
+
+Run all QE variants with `--run-all-qe-models`, or select specific families with `--model-families` (e.g., `gb_lgb_ensemble xgb_xgb_ensemble`). This matches the default behavior in `main.py` (default runs standard families + the default QE; the flag adds all QE variants).
+
 ### Training Modes
 
 **Simple Training (`--train-default`)**:
@@ -197,26 +194,12 @@ python main.py --run-search --model-families lightgbm_regression
 - Use `--use-defaults` to skip search and use default parameters
 - Example: `python main.py --run-search --model-families xgboost_regression`
 
-### Pareto Tools
-
-Utilities for analyzing and exporting Pareto-optimal QE configurations live in `resource_prediction/pareto/` with a small CLI:
-
-```bash
-# Analyze frontier, plot focused chart, and export key models
-python -m resource_prediction.pareto.cli all
-
-# Or run individually
-python -m resource_prediction.pareto.cli analyze
-python -m resource_prediction.pareto.cli plot
-python -m resource_prediction.pareto.cli export
-```
-
-Inputs/outputs are read/written under `artifacts/pareto/` (frontier CSV, focused plot, exported models).
+ 
 
 ## Supported Models
 
 **Regression Models** (predict exact memory values):
-- Quantile Ensemble (GradientBoosting + XGBoost)
+- Quantile Ensemble (LGB+XGB default; other variants optional)
 - XGBoost Regression
 - LightGBM Regression
 
@@ -250,12 +233,12 @@ The models are organized for clarity and maintainability:
 
 ```
 resource_prediction/models/
-├── __init__.py              # Public API exports
-├── base.py                  # BasePredictor interface
-├── unified_wrapper.py       # DeployableModel for production
-└── implementations/         # Specific model implementations
+├── __init__.py                    # Public API exports
+├── base.py                        # BasePredictor interface
+├── unified_wrapper.py             # DeployableModel for production
+└── implementations/               # Specific model implementations
     ├── lightgbm_models.py
-    ├── quantile_ensemble.py
+    ├── quantile_ensemble_variants.py
     ├── sklearn_models.py
     └── xgboost_models.py
 ```
@@ -368,3 +351,24 @@ The app structure includes:
 - `app/data_loader.py`: simulation data loading utilities
 
 Available models are defined in the `available_models` dict in `app/app.py`. To add a new model, include its display name and the path to its serialized .pkl file in that dict.
+
+### Pareto Tools
+
+Utilities for analyzing and exporting Pareto‑optimal QE configurations live in `resource_prediction/pareto/` with a small CLI:
+
+```bash
+# Analyze frontier, plot focused chart, and export key models
+python -m resource_prediction.pareto.cli all
+
+# Or run individually
+python -m resource_prediction.pareto.cli analyze
+python -m resource_prediction.pareto.cli plot
+python -m resource_prediction.pareto.cli export
+```
+
+Inputs/outputs are under `artifacts/pareto/` (frontier CSVs, focused plot, exported models). The app includes entries for the three exported presets (Balanced, Low Waste, Low Underallocation).
+
+Prerequisites and considerations:
+- Export requires a saved deployable champion for `lgb_xgb_ensemble` at `artifacts/trained_models/lgb_xgb_ensemble.pkl`. Create it by running the main pipeline with `--save-models` (e.g., `python main.py --run-search --task-type regression --save-models`).
+- Sweep (frontier generation) requires preprocessed data; it will reuse tuned hyperparameters for `lgb_xgb_ensemble` from `artifacts/experiments/regression_results.csv` when available, otherwise falls back to sensible defaults.
+- Analyze/plot expect `artifacts/pareto/results/pareto_frontier_points.csv` (and `pareto_all_points.csv` for the focused plot). Run `pareto sweep` first to regenerate them.
