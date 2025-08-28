@@ -36,8 +36,12 @@ extensions = [
 ]
 
 # Mock heavy imports for reliable docs builds without full ML stack
+# Avoid mocking numpy to prevent type-hint evaluation errors like
+# "unsupported operand type(s) for |: 'ndarray' and 'NoneType'" when modules
+# use PEP 604 unions (e.g., np.ndarray | None). Other heavy libs remain mocked
+# to keep docs builds lightweight.
 autodoc_mock_imports = [
-    'numpy', 'pandas', 'sklearn', 'matplotlib', 'seaborn', 'optuna',
+    'pandas', 'sklearn', 'matplotlib', 'seaborn', 'optuna',
     'xgboost', 'lightgbm', 'catboost', 'tqdm', 'joblib', 'streamlit', 'altair'
 ]
 
