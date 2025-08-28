@@ -155,7 +155,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--run-all-qe-models",
         action="store_true",
-        help="Run all experimental quantile ensemble models in addition to the standard gb_xgb_ensemble model.\nBy default, only gb_xgb_ensemble is run. Can be combined with --model-families."
+        help="Run all experimental quantile ensemble models in addition to the standard lgb_xgb_ensemble model.\nBy default, only lgb_xgb_ensemble is run. Can be combined with --model-families."
     )
 
     args = parser.parse_args()
