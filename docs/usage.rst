@@ -323,12 +323,12 @@ Verify your model works with the pipeline:
 
 Once integrated, your model automatically receives:
 
-- ✅ **Hyperparameter Optimization**: Optuna-based search with your defined parameter space
-- ✅ **Cross-Validation**: Automatic k-fold evaluation with business metrics
-- ✅ **DeployableModel Wrapper**: Production-ready packaging with preprocessing
-- ✅ **Model Serialization**: Automatic saving with metadata and version info
-- ✅ **Evaluation Metrics**: Business scoring, accuracy, and comparison charts
-- ✅ **Integration Testing**: Compatibility with simulation and web applications
+- **Hyperparameter Optimization**: Optuna-based search with your defined parameter space
+- **Cross-Validation**: Automatic k-fold evaluation with business metrics
+- **DeployableModel Wrapper**: Production-ready packaging with preprocessing
+- **Model Serialization**: Automatic saving with metadata and version info
+- **Evaluation Metrics**: Business scoring, accuracy, and comparison charts
+- **Integration Testing**: Compatibility with simulation and web applications
 
 **Advanced Customization:**
 
