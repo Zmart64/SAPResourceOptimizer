@@ -1,9 +1,28 @@
 import sys
 from pathlib import Path
+try:
+    import tomllib  # Python 3.11+
+except Exception:  # pragma: no cover - fallback for Python <3.11
+    try:
+        import tomli as tomllib  # type: ignore
+    except Exception:
+        tomllib = None  # type: ignore
 
+# Project metadata
 project = 'Resource Prediction'
-author = 'Your Name'
-release = '0.1.0'
+author = 'Project Contributors'
+
+# Derive release/version from pyproject.toml if available
+try:
+    pyproject_path = Path(__file__).resolve().parents[1] / 'pyproject.toml'
+    if tomllib is not None and pyproject_path.exists():
+        with pyproject_path.open('rb') as f:
+            data = tomllib.load(f)
+        release = data.get('tool', {}).get('poetry', {}).get('version', '0.1.0')
+    else:
+        release = '0.1.0'
+except Exception:
+    release = '0.1.0'
 
 # Add the project root to the Python path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -14,6 +33,12 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
+]
+
+# Mock heavy imports for reliable docs builds without full ML stack
+autodoc_mock_imports = [
+    'numpy', 'pandas', 'sklearn', 'matplotlib', 'seaborn', 'optuna',
+    'xgboost', 'lightgbm', 'catboost', 'tqdm', 'joblib', 'streamlit', 'altair'
 ]
 
 # Autodoc settings

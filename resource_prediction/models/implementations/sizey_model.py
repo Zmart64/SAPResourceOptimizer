@@ -14,15 +14,12 @@ from resource_prediction.models.implementations.sizey import (
 
 class SizeyPredictor(BasePredictor):
     """
-    Wrapper around the sizey ensemble.
-    Ensemble comprises of:
-        - Linear Regression
-        - Neural Network
-        - Random Forest
-        - KNN
+    Wrapper around the Sizey ensemble.
 
-    Sizey uses Resource Allocation Quality (RAQ)
-    to select the best predictor or ensemble predictions.
+    Ensemble comprises of: Linear Regression, Neural Network, Random Forest, and KNN.
+
+    Sizey uses Resource Allocation Quality (RAQ) to select the best predictor or
+    combine predictions conservatively for allocation.
     """
 
     def __init__(
