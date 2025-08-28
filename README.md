@@ -367,3 +367,8 @@ python -m resource_prediction.pareto.cli export
 ```
 
 Inputs/outputs are under `artifacts/pareto/` (frontier CSVs, focused plot, exported models). The app includes entries for the three exported presets (Balanced, Low Waste, Low Underallocation).
+
+Prerequisites and considerations:
+- Export requires a saved deployable champion for `lgb_xgb_ensemble` at `artifacts/trained_models/lgb_xgb_ensemble.pkl`. Create it by running the main pipeline with `--save-models` (e.g., `python main.py --run-search --task-type regression --save-models`).
+- Sweep (frontier generation) requires preprocessed data; it will reuse tuned hyperparameters for `lgb_xgb_ensemble` from `artifacts/experiments/regression_results.csv` when available, otherwise falls back to sensible defaults.
+- Analyze/plot expect `artifacts/pareto/results/pareto_frontier_points.csv` (and `pareto_all_points.csv` for the focused plot). Run `pareto sweep` first to regenerate them.
