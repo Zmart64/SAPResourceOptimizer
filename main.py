@@ -138,7 +138,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save-models",
         action="store_true",
-        help="If set, saves the final evaluated champion model(s) as .pkl files in the `resource_prediction/models` directory."
+        help="If set, saves the final evaluated champion model(s) as .pkl files under artifacts/trained_models."
     )
     parser.add_argument(
         "--model-families",

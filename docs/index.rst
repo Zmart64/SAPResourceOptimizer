@@ -35,7 +35,7 @@ To get started with this project:
 
 1. **Install dependencies**: ``poetry install --with dev``
 2. **Build documentation**: ``make html`` or ``make serve``
-3. **Run the pipeline**: ``python main.py --run-search``
+3. **Run training**: ``python main.py --train-default`` (fast) or ``python main.py --run-search`` (optimized)
 
 For detailed setup instructions, see the :doc:`usage` guide.
 
@@ -45,4 +45,5 @@ For detailed setup instructions, see the :doc:`usage` guide.
 
    usage
    data
+   cli
    api
