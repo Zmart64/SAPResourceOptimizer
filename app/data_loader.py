@@ -51,9 +51,10 @@ class SimulationDataLoader:
             df_raw['time'] = pd.to_datetime(df_raw['time'], format='mixed', errors='coerce')
             df_raw.dropna(subset=['time'], inplace=True)
             
-            # Apply the same transformations as in preprocessor
-            df_raw["max_rss_gb"] = df_raw["max_rss"] / 1e9
-            df_raw["memreq_gb"] = df_raw["memreq"] / 1e9
+            # Apply the same transformations as in the training preprocessor
+            # Ensure identical unit conversions for consistency across app and pipeline
+            df_raw["max_rss_gb"] = pd.to_numeric(df_raw["max_rss"], errors="coerce") / (1024**3)
+            df_raw["memreq_gb"] = pd.to_numeric(df_raw["memreq"], errors="coerce").fillna(0) / 1024
             
             # Get the test split (same logic as preprocessor)
             split_index = int(len(df_raw) * (1 - self.config.TEST_SET_FRACTION))
