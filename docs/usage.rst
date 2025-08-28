@@ -97,7 +97,7 @@ Execute the full pipeline for a specific task type:
 
 .. code-block:: console
 
-   python main.py --model-type classification --run-search
+   python main.py --task-type classification --run-search
 
 Subsequent runs
 ---------------
@@ -106,7 +106,7 @@ To reuse previously processed data and run a different task type:
 
 .. code-block:: console
 
-   python main.py --model-type regression --skip-preprocessing --run-search
+   python main.py --task-type regression --skip-preprocessing --run-search
 
 Command line options
 --------------------
@@ -497,3 +497,15 @@ Utilities for analyzing and exporting Pareto‑optimal QE configurations are ava
    python -m resource_prediction.pareto.cli export
 
 Artifacts are written under ``artifacts/pareto/`` (frontier CSVs, focused plot, exported models).
+
+Prerequisites and considerations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- ``export`` requires a saved deployable champion for ``lgb_xgb_ensemble`` at
+  ``artifacts/trained_models/lgb_xgb_ensemble.pkl``. Create it by running the main pipeline with
+  ``--save-models`` (for example: ``python main.py --run-search --task-type regression --save-models``).
+- ``sweep`` (frontier generation) needs preprocessed data. It will reuse tuned hyperparameters for
+  ``lgb_xgb_ensemble`` from ``artifacts/experiments/regression_results.csv`` if present; otherwise it
+  falls back to safe defaults.
+- ``analyze`` and ``plot`` expect existing frontier CSVs under ``artifacts/pareto/results/``.
+  Run ``pareto sweep`` first to (re)generate them.
