@@ -1,5 +1,3 @@
-# main.py
-
 """Command-line interface for the resource prediction pipeline."""
 
 import argparse
