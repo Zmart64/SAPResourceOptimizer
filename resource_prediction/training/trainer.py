@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import seaborn as sns
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from pathlib import Path
 import joblib
@@ -438,27 +437,21 @@ class Trainer:
             print(
                 f"  - {family_name.upper()} (CV Score: {study.best_value:.4f})")
 
-        print("\nSubmitting model evaluation tasks to be run in parallel...")
+        print("\nEvaluating models...")
         regr_results, class_results, all_model_stats = [], [], []
-
-        max_workers = len(models_to_evaluate) if models_to_evaluate else 1
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            future_to_study = {executor.submit(self._evaluate_single_champion, s, self.config, self.X_train,
-                                               self.y_train, self.X_test, self.y_test, self.save_models): s for s in models_to_evaluate}
-            progress_bar = tqdm(as_completed(future_to_study), total=len(
-                models_to_evaluate), desc="Evaluating Models")
-            for future in progress_bar:
-                try:
-                    task_type, result_row, model_stats = future.result()
-                    if task_type == 'regression':
-                        regr_results.append(result_row)
-                    else:
-                        class_results.append(result_row)
-                    all_model_stats.append(model_stats)
-                except Exception as exc:
-                    family_name = future_to_study[future].study_name
-                    print(
-                        f"\nModel {family_name} generated an exception: {exc}")
+        for study in tqdm(models_to_evaluate, total=len(models_to_evaluate), desc="Evaluating Models"):
+            try:
+                task_type, result_row, model_stats = self._evaluate_single_champion(
+                    study, self.config, self.X_train, self.y_train, self.X_test, self.y_test, self.save_models
+                )
+                if task_type == 'regression':
+                    regr_results.append(result_row)
+                else:
+                    class_results.append(result_row)
+                all_model_stats.append(model_stats)
+            except Exception as exc:
+                family_name = study.study_name
+                print(f"\nModel {family_name} generated an exception: {exc}")
 
         print("\nFinal evaluation complete.")
         regr_df = pd.DataFrame(regr_results)

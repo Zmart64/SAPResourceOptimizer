@@ -125,10 +125,9 @@ class OptunaOptimizer:
 
     def run(self):
         """
-        Runs the hyperparameter search for all relevant model families. This method
-        handles study resumption by first trying to load existing timestamped
-        studies, then falls back to creating/loading studies with a clean,
-        deterministic name.
+        Runs the hyperparameter search for all relevant model families using
+        deterministic study names. Existing studies are resumed via
+        ``load_if_exists=True``; no timestamped name lookup is used.
         """
         all_studies = []
 
@@ -138,6 +137,8 @@ class OptunaOptimizer:
         unknown_families = set()
         if requested_families is not None:
             unknown_families = requested_families - known_families
+            if unknown_families:
+                print(f"Warning: Unknown model families will be ignored: {sorted(unknown_families)}")
 
         selected_families: list[tuple[str, str]] = []  # (name, type)
         for family_name, metadata in self.config.MODEL_FAMILIES.items():
@@ -152,57 +153,23 @@ class OptunaOptimizer:
             print(f"  - {name} [{typ}]")
 
         for family_name, _family_type in selected_families:
-            
             storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"
-            db_path = self.config.OPTUNA_DB_DIR / f"{family_name}.db"
-            study = None
-
-            if db_path.exists():
-                try:
-                    all_summaries = optuna.study.get_all_study_summaries(
-                        storage=storage_url
-                    )
-                    timestamped_summaries = [
-                        s
-                        for s in all_summaries
-                        if s.study_name.startswith(f"{family_name}_")
-                    ]
-
-                    if timestamped_summaries:
-                        best_timestamped_study = max(
-                            timestamped_summaries, key=lambda s: s.n_trials
-                        )
-                        print(
-                            f"Resuming existing timestamped study '{best_timestamped_study.study_name}' for model family '{family_name}'."
-                        )
-                        study = optuna.load_study(
-                            study_name=best_timestamped_study.study_name,
-                            storage=storage_url,
-                        )
-                except Exception as e:
-                    print(
-                        f"Warning: Could not read existing database at {db_path}. Error: {e}"
-                    )
-
-            if study is None:
-                study_name = family_name  # The clean, deterministic name
-                print(
-                    f"Loading or creating new study '{study_name}' for model family '{family_name}'."
-                )
-                sampler = optuna.samplers.TPESampler(
-                    seed=self.config.RANDOM_STATE,
-                    constant_liar=True,
-                    n_startup_trials=max(10, 2 * self.config.NUM_PARALLEL_WORKERS),
-                    n_ei_candidates=64,
-                    multivariate=True,
-                )
-                study = optuna.create_study(
-                    study_name=study_name,
-                    storage=storage_url,
-                    direction="minimize",
-                    sampler=sampler,
-                    load_if_exists=True,
-                )
+            study_name = family_name  # Clean, deterministic name
+            print(f"Loading or creating study '{study_name}' for model family '{family_name}'.")
+            sampler = optuna.samplers.TPESampler(
+                seed=self.config.RANDOM_STATE,
+                constant_liar=True,
+                n_startup_trials=max(10, 2 * self.config.NUM_PARALLEL_WORKERS),
+                n_ei_candidates=64,
+                multivariate=True,
+            )
+            study = optuna.create_study(
+                study_name=study_name,
+                storage=storage_url,
+                direction="minimize",
+                sampler=sampler,
+                load_if_exists=True,
+            )
 
             # Count all finished trials (COMPLETE, PRUNED, FAIL) to align with
             # Optuna's n_trials semantics across restarts.

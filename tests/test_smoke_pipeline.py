@@ -140,10 +140,6 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
         all_families = sorted(Config.MODEL_FAMILIES.keys())
         families_no_sizey = [m for m in all_families if m != "sizey_regression"]
 
-        # Build model family list excluding 'sizey_regression'
-        all_families = sorted(Config.MODEL_FAMILIES.keys())
-        families_no_sizey = [m for m in all_families if m != "sizey_regression"]
-
         # Mirror main.py's experimental QE ensembles list for accurate reporting
         experimental_qe_ensembles = [
             'lgb_xgb_ensemble', 'gb_lgb_ensemble', 'xgb_cat_ensemble', 'lgb_cat_ensemble',
@@ -157,13 +153,8 @@ def _run_one(mode: str, include_all_qe_models: bool = False):
         else:
             effective_models = sorted(families_no_sizey)
 
-        print("\n--- Model selection summary ---")
-        print(f"Mode: {mode}, include_all_qe_models={include_all_qe_models}")
-        print(f"Total models to run: {len(effective_models)}")
-        print("Models:")
-        for m in effective_models:
-            print(f"  - {m}")
-        print("--- End selection summary ---\n")
+        # Keep the test output concise; avoid duplicating model lists printed by the pipeline
+        print(f"\nMode: {mode}, include_all_qe_models={include_all_qe_models}")
 
         args = SimpleNamespace(
             run_search=(mode == "search"),

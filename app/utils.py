@@ -37,7 +37,8 @@ def update_summary(placeholder, total_jobs, jobs_under, total_under, total_over,
     with placeholder.container():
         cols = st.columns(6)
         under_pct = (jobs_under / total_jobs) * 100 if total_jobs else 0
-        over_pct = (total_alloc / total_actual) * 100 - 100 if total_actual > 0 else 0
+        # Mirror training/reporting: Over-allocation % = 100 * sum(max(0, alloc-true)) / sum(true)
+        over_pct = (100 * total_over / total_actual) if total_actual > 0 else 0
         cols[0].metric("Total Jobs Processed", total_jobs)
         cols[1].metric("Jobs Under-allocated", f"{jobs_under} ({under_pct:.1f}%)")
         cols[2].metric("Total Under-allocated Shortfall", f"{total_under:.2f} GB")
@@ -93,12 +94,14 @@ def run_simulation_loop(simulation_df, predict_fn, actual_col, memreq_col,
         actual_gb = row[actual_col]
         diff_gb = allocated_mem_gb - actual_gb
 
+        # Always accumulate actual memory for consistent percentage calculations
+        total_actual += actual_gb
+
         if diff_gb < 0:
             jobs_under += 1
             total_under += abs(diff_gb)
         else:
-            total_over += diff_gb
-            total_actual += actual_gb
+            total_over += diff_gb  # sum of positive (allocated - actual)
             total_alloc += allocated_mem_gb
             total_saved += row[memreq_col] - allocated_mem_gb
 
