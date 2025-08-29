@@ -1,3 +1,4 @@
 model_name,avg_pred_time,score_hold,score_cv,Extremely Over (3x-4x)_jobs,Massively Over (4x+)_jobs,Perfectly-allocated_jobs,Severely Over (2x-3x)_jobs,Under-allocated_jobs,Well-allocated (1x-2x)_jobs,total_jobs,Extremely Over (3x-4x)_perc,Massively Over (4x+)_perc,Perfectly-allocated_perc,Severely Over (2x-3x)_perc,Under-allocated_perc,Well-allocated (1x-2x)_perc,total_alloc_mem_gb,total_over_alloc_gb,total_true_mem_gb,total_under_alloc_gb
 Baseline,,,,3223,4948,0,6728,916,6156,21971,14.67,22.52,0.00,30.62,4.17,28.02,4257083.00,2542162.35,1714920.65,0.00
 xgboost_regression,6.607355686677538e-06,98.25831465297834,104.4724137497984,478,497,1,1827,3263,15905,21971,2.18,2.26,0.00,8.32,14.85,72.39,2092806.75,411603.93,1714920.65,33717.78
+rf_classification,1.7538713522305947e-05,75.8258951188751,82.54288929818611,931,904,0,3173,1122,15841,21971,4.24,4.11,0.00,14.44,5.11,72.10,2561320.99,862471.96,1714920.65,16071.61
