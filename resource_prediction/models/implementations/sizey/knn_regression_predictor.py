@@ -23,79 +23,80 @@ simplefilter("ignore", category=ConvergenceWarning)
 class KNNPredictor(PredictionModel):
     """K-Nearest Neighbors Regression Predictor"""
 
-    def initial_model_training(self, X_train, y_train) -> None:
+    def __init__(
+        self, workflow_name: str, task_name: str, err_metr: str, random_state: int
+    ):
+        super().__init__(workflow_name, task_name, err_metr)
+        self.random_state: int = random_state
+        self.x_train_full: np.ndarray = None
+        self.y_train_full: np.ndarray = None
+        self.model_error: float = None
+        self.regressor: KNeighborsRegressor = None
+
+    def initial_model_training(self, x_train: np.ndarray, y_train: np.ndarray) -> None:
+        """Initial model training."""
         # Initialize internal storage of historical values
-        self.X_train_full = X_train
+        self.x_train_full = x_train
         self.y_train_full = y_train
 
-        self._selectBestModel(X_train, y_train)
+        self._search_best_model(x_train, y_train)
 
-    def predict_task(self, task_features: pd.Series) -> float:
-        # Handle both single and multi-feature cases
-        if len(task_features.shape) == 1 and len(task_features) > 1:
-            # Multi-feature case
-            task_features_scaled = self.train_X_scaler.transform(
-                task_features.values.reshape(1, -1)
-            )
-        else:
-            # Single feature case (backward compatibility)
-            task_features_scaled = self.train_X_scaler.transform(
-                task_features.values.reshape(-1, 1)
-            )
+    def predict_task(self, task_features: np.ndarray) -> float:
+        """Predict a single task."""
+        task_features_scaled = self.train_x_scaler.transform(task_features)
+
         return self.train_y_scaler.inverse_transform(
             self.regressor.predict(task_features_scaled).reshape(-1, 1)
         )
 
-    def predict_tasks(self, taskDataframe: pd.DataFrame) -> np.ndarray:
-        taskDataframe_scaled = self.train_X_scaler.transform(taskDataframe)
+    def predict_tasks(self, tasks_dataframe: np.ndarray) -> np.ndarray:
+        """Predict multiple tasks."""
+        tasks_dataframe_scaled = self.train_x_scaler.transform(tasks_dataframe)
 
         return self.train_y_scaler.inverse_transform(
-            self.regressor.predict(taskDataframe_scaled).reshape(-1, 1)
+            self.regressor.predict(tasks_dataframe_scaled).reshape(-1, 1)
         )
 
-    def update_model(self, X_train: pd.Series, y_train: float) -> None:
+    def update_model(self, x_train: pd.Series, y_train: float) -> None:
+        """Update the model with new data."""
         # Append the newly incoming data to maintain all historical data
-        # Handle both single and multi-feature cases
-        if len(X_train.shape) == 1 and len(X_train) > 1:
-            # Multi-feature case
-            X_train_reshaped = X_train.values.reshape(1, -1)
-        else:
-            # Single feature case
-            X_train_reshaped = (
-                X_train.values.reshape(1, -1) if len(X_train.shape) == 1 else [X_train]
-            )
 
-        self.X_train_full = np.concatenate((self.X_train_full, X_train_reshaped))
+        self.x_train_full = np.concatenate(
+            (self.x_train_full, x_train.values.reshape(1, -1))
+        )
         self.y_train_full = np.concatenate(
             (self.y_train_full, np.array([y_train]).reshape(-1, 1))
         )
 
         # Scaling of data with all historical data
-        self.train_X_scaler = self.train_X_scaler.fit(self.X_train_full)
+        self.train_x_scaler = self.train_x_scaler.fit(self.x_train_full)
         self.train_y_scaler = self.train_y_scaler.fit(self.y_train_full)
 
-        self._selectBestModel(self.X_train_full, self.y_train_full)
+        # Retrain existing model with scaled data
+        self._search_best_model(self.x_train_full, self.y_train_full)
 
-    def smoothed_mape(self, y_true, y_pred, epsilon=1e-8):
-        y_true, y_pred = np.array(y_true), np.array(y_pred)
+    def smoothed_mape(
+        self, y_true: np.ndarray, y_pred: np.ndarray, epsilon: float = 1e-8
+    ) -> float:
+        """Compute the smoothed Mean Absolute Percentage Error (MAPE)."""
+        # y_true, y_pred = np.array(y_true), np.array(y_pred)
         # Calculate the individual percentage errors and clip each at 100%
         mape = np.abs((y_true - y_pred) / (y_true + epsilon))
         mape = -1 * np.clip(mape, None, 1)  # Clip values at 100%
         return np.mean(mape)
 
-    def _selectBestModel(self, X_train, y_train):
-        self.train_X_scaler = MinMaxScaler()
+    def _search_best_model(self, x_train: np.ndarray, y_train: np.ndarray):
+        """Grid search to find best model for training data"""
+        self.train_x_scaler = MinMaxScaler()
         self.train_y_scaler = MinMaxScaler()
 
         # Scale Features
-        X_train_scaled = self.train_X_scaler.fit_transform(X_train)
-        y_train_scaled = self.train_y_scaler.fit_transform(
-            y_train.reshape(-1, 1)
-        )  # Ensure y is correctly shaped
+        x_train_scaled = self.train_x_scaler.fit_transform(x_train)
+        y_train_scaled = self.train_y_scaler.fit_transform(y_train)
 
         smoothed_mape_scorer = make_scorer(self.smoothed_mape, greater_is_better=True)
 
-        param_grid = {
+        grid_params = {
             "n_neighbors": [2, 3, 5, 7, 9],
             "weights": ["uniform", "distance"],
             "algorithm": ["auto", "ball_tree", "kd_tree", "brute"],
@@ -106,7 +107,7 @@ class KNNPredictor(PredictionModel):
         if self.err_metr == "smoothed_mape":
             grid_search = GridSearchCV(
                 estimator=model,
-                param_grid=param_grid,
+                param_grid=grid_params,
                 cv=10,
                 error_score="raise",
                 n_jobs=-1,
@@ -115,7 +116,7 @@ class KNNPredictor(PredictionModel):
         elif self.err_metr == "neg_mean_squared_error":
             grid_search = GridSearchCV(
                 estimator=model,
-                param_grid=param_grid,
+                param_grid=grid_params,
                 cv=10,
                 error_score="raise",
                 n_jobs=-1,
@@ -124,7 +125,7 @@ class KNNPredictor(PredictionModel):
         else:
             raise NotImplementedError("Error metric not found.")
 
-        grid_search.fit(X_train_scaled, y_train_scaled.ravel())
+        grid_search.fit(x_train_scaled, y_train_scaled.ravel())
 
         best_score = grid_search.best_score_
         best_model = grid_search.best_estimator_
