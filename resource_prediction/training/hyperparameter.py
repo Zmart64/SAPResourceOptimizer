@@ -58,10 +58,19 @@ class OptunaOptimizer:
             # All wrapper models now use the same interface
             model.fit(X_train_fold, y_train_fold)
             allocs.extend(model.predict(X_test_fold))
+            if model.__class__.__name__ == "SizeyRegressor":
+                print("Hello")
+                model.calculate_error(y_test_fold)
             truths.extend(y_test_fold)
 
-            if trial is not None and hasattr(trial, "report") and hasattr(trial, "should_prune"):
-                metrics_partial = self._allocation_metrics(np.array(allocs), np.array(truths))
+            if (
+                trial is not None
+                and hasattr(trial, "report")
+                and hasattr(trial, "should_prune")
+            ):
+                metrics_partial = self._allocation_metrics(
+                    np.array(allocs), np.array(truths)
+                )
                 score_partial = self._business_score(metrics_partial)
                 trial.report(score_partial, step=fold_idx)
                 if trial.should_prune():
@@ -70,7 +79,9 @@ class OptunaOptimizer:
         metrics_final = self._allocation_metrics(np.array(allocs), np.array(truths))
         return self._business_score(metrics_final)
 
-    def _evaluate_classification(self, model, X, y, trial=None, confidence_threshold: float | None = None):
+    def _evaluate_classification(
+        self, model, X, y, trial=None, confidence_threshold: float | None = None
+    ):
         """Evaluates a classification model using time-series cross-validation, with optional pruning.
 
         Passes an explicit confidence_threshold to the model's predict method when provided.
@@ -85,15 +96,23 @@ class OptunaOptimizer:
             # Fit and predict using the wrapper model's interface
             model.fit(X_train_fold, y_train_fold)
             if confidence_threshold is not None:
-                pred_allocs = model.predict(X_test_fold, confidence_threshold=confidence_threshold)
+                pred_allocs = model.predict(
+                    X_test_fold, confidence_threshold=confidence_threshold
+                )
             else:
                 pred_allocs = model.predict(X_test_fold)
 
             allocs.extend(pred_allocs)
             truths.extend(y_test_fold)
 
-            if trial is not None and hasattr(trial, "report") and hasattr(trial, "should_prune"):
-                metrics_partial = self._allocation_metrics(np.array(allocs), np.array(truths))
+            if (
+                trial is not None
+                and hasattr(trial, "report")
+                and hasattr(trial, "should_prune")
+            ):
+                metrics_partial = self._allocation_metrics(
+                    np.array(allocs), np.array(truths)
+                )
                 score_partial = self._business_score(metrics_partial)
                 trial.report(score_partial, step=fold_idx)
                 if trial.should_prune():
@@ -121,7 +140,11 @@ class OptunaOptimizer:
         if task_type == "classification":
             model.confidence_threshold = confidence_threshold
             return self._evaluate_classification(
-                model, X_trial, self.y_train_gb, trial, confidence_threshold=confidence_threshold
+                model,
+                X_trial,
+                self.y_train_gb,
+                trial,
+                confidence_threshold=confidence_threshold,
             )
         else:
             return self._evaluate_regression(model, X_trial, self.y_train_gb, trial)

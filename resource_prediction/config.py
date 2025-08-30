@@ -505,12 +505,14 @@ class Config:
             "alpha": {"min": 0.01, "max": 0.5, "type": "float", "default": 0.1},
             "beta": {"min": 0.0, "max": 1.0, "type": "float", "default": 1.0},
             "offset_strat": {
-                "choices": ["DYNAMIC", "STD_ALL", "MED_UNDER", "MED_ALL", "STD_UNDER"],
-                "default": "DYNAMIC",
+                "choices": ["STD_ALL", "MED_UNDER", "MED_ALL", "STD_UNDER"],
+                "default": "STD_ALL",
             },
             "error_strat": {
-                "choices": ["MAX_EVER_OBSERVED", "DOUBLE"],
-                "default": "MAX_EVER_OBSERVED",
+                "choices": [
+                    "DOUBLE"
+                ],  # feature not in use, only in reactive online learning
+                "default": "DOUBLE",
             },
             "use_softmax": {"choices": [True, False], "default": True},
             "error_metric": {

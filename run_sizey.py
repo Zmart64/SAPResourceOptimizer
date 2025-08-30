@@ -24,7 +24,7 @@ from resource_prediction.training.trainer import Trainer
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 def main():
@@ -47,32 +47,26 @@ def main():
         with open(data_path / "y_test.pkl", "rb") as f:
             y_test = pickle.load(f)
 
-        # Filter to numeric features only (Sizey requires numeric input)
-        numeric_columns = x_train.select_dtypes(
-            include=["int32", "int64", "float64"]
-        ).columns
-        x_train_numeric = x_train[numeric_columns]
-        x_test_numeric = x_test[numeric_columns]
-
-        print(f"Full dataset: x_train={x_train_numeric.shape}, y_train={y_train.shape}")
+        print(f"Full dataset: x_train={x_train.shape}, y_train={y_train.shape}")
 
         print("Creating predictor")
         sizey = SizeyPredictor(offset_strat=OffsetStrategy.STD_ALL, use_softmax=False)
         print("Predictor created successfully!")
 
         print("Training Sizey model...")
-        sizey.fit(x_train_numeric, y_train)
+        sizey.fit(x_train, y_train)
         print("Model trained successfully!")
 
         # Make predictions on test subset
         print("Making predictions on test subset")
         y_test_subset = y_test
-        x_test_subset = x_test_numeric
-        if hasattr(y_test_subset, "iloc") and len(y_test_subset.shape) > 1:
-            y_test_subset = y_test_subset.squeeze()  # Convert DataFrame to Series
+        x_test_subset = x_test
+
+        print(
+            f"Test subset: x_test={x_test_subset.shape}, y_test={y_test_subset.shape}"
+        )
 
         predictions = sizey.predict(x_test_subset, y_test_subset)
-
         # Use business evaluation functions from resource_prediction
         print("Evaluation Results:")
         print("-" * 60)
