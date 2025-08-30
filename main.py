@@ -71,6 +71,9 @@ def main(args):
             all_models = list(Config.MODEL_FAMILIES.keys())
             model_families = [m for m in all_models if m not in experimental_qe_ensembles]
 
+    if "sizey_regression" in model_families:
+        model_families.remove("sizey_regression")
+
     trainer = Trainer(
         config,
         evaluate_all_archs=args.evaluate_all_archs,
