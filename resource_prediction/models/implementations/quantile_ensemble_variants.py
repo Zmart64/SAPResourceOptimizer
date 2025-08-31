@@ -94,41 +94,7 @@ class GBXGBQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        
-        Args:
-            X: Input DataFrame
-            fit: Whether to fit the encoder (store column names)
-            
-        Returns:
-            Encoded DataFrame with aligned columns
-        """
-        # Create dummy variables
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        
-        # Handle duplicate columns (shouldn't happen but defensive programming)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        
-        if fit:
-            # Store column names for future alignment
-            self.columns = Xd.columns.tolist()
-        else:
-            # Align columns to match training data
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Add missing columns with zeros
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            
-            # Reorder columns to match training
-            Xd = Xd[self.columns]
-        
-        return Xd.astype(float)
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """
@@ -290,41 +256,7 @@ class LGBXGBQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        
-        Args:
-            X: Input DataFrame
-            fit: Whether to fit the encoder (store column names)
-            
-        Returns:
-            Encoded DataFrame with aligned columns
-        """
-        # Create dummy variables
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        
-        # Handle duplicate columns (shouldn't happen but defensive programming)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        
-        if fit:
-            # Store column names for future alignment
-            self.columns = Xd.columns.tolist()
-        else:
-            # Align columns to match training data
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Add missing columns with zeros
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            
-            # Reorder columns to match training
-            Xd = Xd[self.columns]
-        
-        return Xd.astype(float)
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """
@@ -481,41 +413,7 @@ class GBLGBQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        
-        Args:
-            X: Input DataFrame
-            fit: Whether to fit the encoder (store column names)
-            
-        Returns:
-            Encoded DataFrame with aligned columns
-        """
-        # Create dummy variables
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        
-        # Handle duplicate columns (shouldn't happen but defensive programming)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        
-        if fit:
-            # Store column names for future alignment
-            self.columns = Xd.columns.tolist()
-        else:
-            # Align columns to match training data
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Add missing columns with zeros
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            
-            # Reorder columns to match training
-            Xd = Xd[self.columns]
-        
-        return Xd.astype(float)
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """
@@ -669,41 +567,7 @@ class XGBCatQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        
-        Args:
-            X: Input DataFrame
-            fit: Whether to fit the encoder (store column names)
-            
-        Returns:
-            Encoded DataFrame with aligned columns
-        """
-        # Create dummy variables
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        
-        # Handle duplicate columns (shouldn't happen but defensive programming)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        
-        if fit:
-            # Store column names for future alignment
-            self.columns = Xd.columns.tolist()
-        else:
-            # Align columns to match training data
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Add missing columns with zeros
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            
-            # Reorder columns to match training
-            Xd = Xd[self.columns]
-        
-        return Xd.astype(float)
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """
@@ -862,41 +726,7 @@ class LGBCatQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        
-        Args:
-            X: Input DataFrame
-            fit: Whether to fit the encoder (store column names)
-            
-        Returns:
-            Encoded DataFrame with aligned columns
-        """
-        # Create dummy variables
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        
-        # Handle duplicate columns (shouldn't happen but defensive programming)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        
-        if fit:
-            # Store column names for future alignment
-            self.columns = Xd.columns.tolist()
-        else:
-            # Align columns to match training data
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Add missing columns with zeros
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            
-            # Reorder columns to match training
-            Xd = Xd[self.columns]
-        
-        return Xd.astype(float)
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """
@@ -1029,41 +859,7 @@ class XGBXGBQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        
-        Args:
-            X: Input DataFrame
-            fit: Whether to fit the encoder (store column names)
-            
-        Returns:
-            Encoded DataFrame with aligned columns
-        """
-        # Create dummy variables
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        
-        # Handle duplicate columns (shouldn't happen but defensive programming)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        
-        if fit:
-            # Store column names for future alignment
-            self.columns = Xd.columns.tolist()
-        else:
-            # Align columns to match training data
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Add missing columns with zeros
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            
-            # Reorder columns to match training
-            Xd = Xd[self.columns]
-        
-        return Xd.astype(float)
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """
@@ -1214,23 +1010,7 @@ class LGBLGBQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
 
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """
-        One-hot encode categorical features and align columns.
-        """
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        if fit:
-            self.columns = Xd.columns.tolist()
-        else:
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            Xd = Xd[self.columns]
-        return Xd.astype(float)
+    
 
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """Fit both underlying LightGBM regressors on the training data."""
@@ -1335,21 +1115,7 @@ class CatCatQuantileEnsemble(BasePredictor):
         # Store column information for consistent encoding
         self.columns = None
 
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """One-hot encode categorical features and align columns."""
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
-        if Xd.columns.duplicated().any():
-            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
-        if fit:
-            self.columns = Xd.columns.tolist()
-        else:
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            Xd = Xd[self.columns]
-        return Xd.astype(float)
+    
 
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """Fit both underlying CatBoost regressors on the training data."""
