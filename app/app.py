@@ -120,8 +120,7 @@ def main():
     
     # Available models configuration
     available_models = {
-        "LightGBM Classification": "artifacts/trained_models/lightgbm_classification.pkl",
-        "XGBoost Classification": "artifacts/trained_models/xgboost_classification.pkl", 
+        "RandomForest Classification": "artifacts/trained_models/rf_classification.pkl",
         "QE Balanced": "artifacts/pareto/models/qe_balanced.pkl",
         "QE Low Waste": "artifacts/pareto/models/qe_low_waste.pkl",
         "QE Low Underallocation": "artifacts/pareto/models/qe_low_underallocation.pkl"

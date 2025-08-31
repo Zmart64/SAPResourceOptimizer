@@ -454,10 +454,20 @@ Pre-trained models are organized in the ``artifacts/trained_models/`` directory:
 
    artifacts/
    ├── trained_models/
+   │   ├── rf_classification.pkl
+   │   ├── lr_classification.pkl
    │   ├── lightgbm_classification.pkl
    │   ├── xgboost_classification.pkl
    │   ├── lightgbm_regression.pkl
-   │   └── xgboost_regression.pkl
+   │   ├── xgboost_regression.pkl
+   │   ├── lgb_xgb_ensemble.pkl
+   │   ├── gb_xgb_ensemble.pkl
+   │   ├── gb_lgb_ensemble.pkl
+   │   ├── lgb_lgb_ensemble.pkl
+   │   ├── xgb_xgb_ensemble.pkl
+   │   ├── lgb_cat_ensemble.pkl
+   │   ├── xgb_cat_ensemble.pkl
+   │   └── cat_cat_ensemble.pkl
    └── pareto/models/
        ├── qe_balanced.pkl
        ├── qe_low_waste.pkl

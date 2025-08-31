@@ -41,8 +41,8 @@ The project provides a `DeployableModel` wrapper for consistent model loading an
 ```python
 from resource_prediction.models import DeployableModel
 
-# Load any model type
-model = DeployableModel.load("artifacts/trained_models/lightgbm_classification.pkl")
+# Load a trained model
+model = DeployableModel.load("artifacts/trained_models/rf_classification.pkl")
 
 # Make predictions (preprocessing happens automatically)
 predictions = model.predict(raw_dataframe)
