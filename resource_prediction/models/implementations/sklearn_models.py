@@ -71,23 +71,7 @@ class RandomForestClassifier(BasePredictor):
         
         return np.array(sorted(list(set(bin_edges))))
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """One-hot encode categorical features."""
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False).astype(float)
-        
-        if fit:
-            self.columns = Xd.columns.tolist()
-        else:
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Align columns
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            Xd = Xd[self.columns]
-        
-        return Xd
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """Fit the Random Forest classifier."""
@@ -212,23 +196,7 @@ class LogisticRegression(BasePredictor):
         
         return np.array(sorted(list(set(bin_edges))))
     
-    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
-        """One-hot encode categorical features."""
-        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False).astype(float)
-        
-        if fit:
-            self.columns = Xd.columns.tolist()
-        else:
-            if self.columns is None:
-                raise ValueError("Model must be fitted before making predictions")
-            
-            # Align columns
-            missing_cols = set(self.columns) - set(Xd.columns)
-            for col in missing_cols:
-                Xd[col] = 0
-            Xd = Xd[self.columns]
-        
-        return Xd
+    
     
     def fit(self, X: pd.DataFrame, y: pd.Series, **fit_params) -> None:
         """Fit the Logistic Regression classifier."""
@@ -281,4 +249,3 @@ class LogisticRegression(BasePredictor):
             'strategy': self.strategy
         })
         return params
-

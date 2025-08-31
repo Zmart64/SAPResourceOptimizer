@@ -59,3 +59,45 @@ class BasePredictor(ABC):
             Self for method chaining
         """
         return self
+
+    # Shared encoding utility for all predictors
+    def _encode(self, X: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
+        """
+        One-hot encode categorical/object features consistently and align columns.
+
+        This central implementation eliminates duplicate _encode methods across models.
+
+        Args:
+            X: Input feature DataFrame
+            fit: If True, learns and stores the encoded column set. If False, aligns to stored columns
+
+        Returns:
+            Encoded and aligned DataFrame of floats
+        """
+        # Create dummy variables (consistent with prior implementations)
+        Xd = pd.get_dummies(X, drop_first=True, dummy_na=False)
+
+        # Defensive: remove any duplicate columns
+        if Xd.columns.duplicated().any():
+            Xd = Xd.loc[:, ~Xd.columns.duplicated()]
+
+        # Ensure numeric dtype
+        Xd = Xd.astype(float)
+
+        if fit:
+            # Store column names for future alignment
+            # Backward-compatible attribute name used by existing code
+            self.columns = Xd.columns.tolist()
+        else:
+            # Align columns to match training data
+            if not hasattr(self, "columns") or self.columns is None:
+                raise ValueError("Model must be fitted before making predictions")
+
+            missing_cols = set(self.columns) - set(Xd.columns)
+            for col in missing_cols:
+                Xd[col] = 0.0
+
+            # Reorder columns to match training
+            Xd = Xd[self.columns]
+
+        return Xd
