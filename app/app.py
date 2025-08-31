@@ -118,7 +118,7 @@ def main():
     # Model selection in sidebar
     st.sidebar.title("Model Selection")
     
-    # Available models configuration (use only RF for classification)
+    # Available models configuration
     available_models = {
         "RandomForest Classification": "artifacts/trained_models/rf_classification.pkl",
         "QE Balanced": "artifacts/pareto/models/qe_balanced.pkl",
