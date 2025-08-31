@@ -100,11 +100,9 @@ class SizeyPredictor(BasePredictor):
             y: Target values
             **fit_params: Additional fitting parameters
         """
-        X.to_csv("debug_X_fit.csv", index=False)
 
         # Encode features
         x_encoded = self._encode(X, fit=True)
-        x_encoded.to_csv("debug_X_fit_encoded.csv", index=False)
 
         # Convert x_encoded to numpy array
         x_array = x_encoded.to_numpy()

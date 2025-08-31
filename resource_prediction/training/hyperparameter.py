@@ -55,10 +55,11 @@ class OptunaOptimizer:
 
             # All wrapper models now use the same interface
             model.fit(X_train_fold, y_train_fold)
-            allocs.extend(model.predict(X_test_fold))
-            if model.__class__.__name__ == "SizeyRegressor":
-                print("Hello")
-                model.calculate_error(y_test_fold)
+            if model.__class__.__name__ == "SizeyPredictor":
+                pred_allocs = model.predict(X_test_fold, y_test_fold)
+            else:
+                pred_allocs = model.predict(X_test_fold)
+            allocs.extend(pred_allocs)
             truths.extend(y_test_fold)
 
             if (
@@ -161,7 +162,9 @@ class OptunaOptimizer:
         if requested_families is not None:
             unknown_families = requested_families - known_families
             if unknown_families:
-                print(f"Warning: Unknown model families will be ignored: {sorted(unknown_families)}")
+                print(
+                    f"Warning: Unknown model families will be ignored: {sorted(unknown_families)}"
+                )
 
         selected_families: list[tuple[str, str]] = []  # (name, type)
         for family_name, metadata in self.config.MODEL_FAMILIES.items():
@@ -178,7 +181,9 @@ class OptunaOptimizer:
         for family_name, _family_type in selected_families:
             storage_url = f"sqlite:///{self.config.OPTUNA_DB_DIR}/{family_name}.db"
             study_name = family_name  # Clean, deterministic name
-            print(f"Loading or creating study '{study_name}' for model family '{family_name}'.")
+            print(
+                f"Loading or creating study '{study_name}' for model family '{family_name}'."
+            )
             sampler = optuna.samplers.TPESampler(
                 seed=self.config.RANDOM_STATE,
                 constant_liar=True,
