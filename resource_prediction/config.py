@@ -6,12 +6,12 @@ import optuna
 
 # Direct model imports following Zmart's pattern
 from resource_prediction.models import (
+    CatCatQuantileEnsemble,
     GBLGBQuantileEnsemble,
     GBXGBQuantileEnsemble,
     LGBCatQuantileEnsemble,
-    LGBXGBQuantileEnsemble,
     LGBLGBQuantileEnsemble,
-    CatCatQuantileEnsemble,
+    LGBXGBQuantileEnsemble,
     LightGBMClassifier,
     LightGBMRegressor,
     LogisticRegression,
@@ -21,10 +21,6 @@ from resource_prediction.models import (
     XGBoostClassifier,
     XGBoostRegressor,
     XGBXGBQuantileEnsemble,
-)
-from resource_prediction.models.implementations.sizey import (
-    OffsetStrategy,
-    UnderPredictionStrategy,
 )
 
 
@@ -123,7 +119,6 @@ class Config:
             "base_model": "xgb_xgb_quantile_ensemble",
             "class": XGBXGBQuantileEnsemble,
         },
-        
         "lgb_lgb_ensemble": {
             "type": "regression",
             "base_model": "lgb_lgb_quantile_ensemble",
@@ -181,22 +176,61 @@ class Config:
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "gb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
             "gb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "gb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "gb_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
+            "xgb_n_estimators": {
+                "min": 200,
+                "max": 1200,
+                "type": "int",
+                "default": 400,
+            },
             "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "xgb_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # LightGBM + XGBoost Ensemble
         "lgb_xgb_ensemble": {
             "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb_n_estimators": {
+                "min": 200,
+                "max": 1000,
+                "type": "int",
+                "default": 400,
+            },
             "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
             "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
-            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "lgb_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
+            "xgb_n_estimators": {
+                "min": 200,
+                "max": 1200,
+                "type": "int",
+                "default": 400,
+            },
             "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "xgb_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # GradientBoosting + LightGBM Ensemble
         "gb_lgb_ensemble": {
@@ -204,34 +238,85 @@ class Config:
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             "gb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
             "gb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "gb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
-            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "gb_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
+            "lgb_n_estimators": {
+                "min": 200,
+                "max": 1000,
+                "type": "int",
+                "default": 400,
+            },
             "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
             "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
-            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # XGBoost + CatBoost Ensemble
         "xgb_cat_ensemble": {
             "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "xgb_n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 400},
+            "xgb_n_estimators": {
+                "min": 200,
+                "max": 1200,
+                "type": "int",
+                "default": 400,
+            },
             "xgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "xgb_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "xgb_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
             "cat_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
             "cat_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-            "cat_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "cat_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # LightGBM + CatBoost Ensemble
         "lgb_cat_ensemble": {
             "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
-            "lgb_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb_n_estimators": {
+                "min": 200,
+                "max": 1000,
+                "type": "int",
+                "default": 400,
+            },
             "lgb_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
             "lgb_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
-            "lgb_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
             "cat_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
             "cat_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-            "cat_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "cat_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # XGBoost + XGBoost Ensemble (standard ranges like other ensembles)
         "xgb_xgb_ensemble": {
@@ -268,20 +353,41 @@ class Config:
                 "default": 0.1,
             },
         },
-        
         # LightGBM + LightGBM Ensemble (two diverse LightGBM learners)
         "lgb_lgb_ensemble": {
             "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "safety": {"min": 1.00, "max": 1.15, "type": "float", "default": 1.05},
             # First LGBM model parameters
-            "lgb1_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb1_n_estimators": {
+                "min": 200,
+                "max": 1000,
+                "type": "int",
+                "default": 400,
+            },
             "lgb1_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "lgb1_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb1_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
             "lgb1_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
             # Second LGBM model parameters
-            "lgb2_n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 400},
+            "lgb2_n_estimators": {
+                "min": 200,
+                "max": 1000,
+                "type": "int",
+                "default": 400,
+            },
             "lgb2_max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "lgb2_lr": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "lgb2_lr": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
             "lgb2_num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
         },
         # CatBoost + CatBoost Ensemble (two diverse CatBoost learners)
@@ -291,21 +397,50 @@ class Config:
             # First CatBoost model parameters
             "cat1_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
             "cat1_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-            "cat1_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "cat1_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
             # Second CatBoost model parameters
             "cat2_iterations": {"min": 300, "max": 1200, "type": "int", "default": 500},
             "cat2_depth": {"min": 4, "max": 10, "type": "int", "default": 6},
-            "cat2_lr": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "cat2_lr": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # XGBoost Regression - only XGBoost regression parameters
         "xgboost_regression": {
             "alpha": {"min": 0.90, "max": 0.99, "type": "float", "default": 0.95},
             "n_estimators": {"min": 200, "max": 1200, "type": "int", "default": 500},
             "max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "learning_rate": {"min": 0.01, "max": 0.3, "type": "float", "log": True, "default": 0.1},
+            "learning_rate": {
+                "min": 0.01,
+                "max": 0.3,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
             "subsample": {"min": 0.6, "max": 1.0, "type": "float", "default": 0.8},
-            "colsample_bytree": {"min": 0.6, "max": 1.0, "type": "float", "default": 0.8},
-            "min_child_weight": {"min": 0.1, "max": 10.0, "type": "float", "log": True, "default": 1.0},
+            "colsample_bytree": {
+                "min": 0.6,
+                "max": 1.0,
+                "type": "float",
+                "default": 0.8,
+            },
+            "min_child_weight": {
+                "min": 0.1,
+                "max": 10.0,
+                "type": "float",
+                "log": True,
+                "default": 1.0,
+            },
             "reg_lambda": {"min": 0.0, "max": 20.0, "type": "float", "default": 1.0},
             "reg_alpha": {"min": 0.0, "max": 5.0, "type": "float", "default": 0.0},
         },
@@ -338,7 +473,13 @@ class Config:
             "n_estimators": {"min": 200, "max": 1000, "type": "int", "default": 500},
             "num_leaves": {"min": 15, "max": 255, "type": "int", "default": 31},
             "max_depth": {"min": 3, "max": 12, "type": "int", "default": 6},
-            "learning_rate": {"min": 0.01, "max": 0.2, "type": "float", "log": True, "default": 0.1},
+            "learning_rate": {
+                "min": 0.01,
+                "max": 0.2,
+                "type": "float",
+                "log": True,
+                "default": 0.1,
+            },
         },
         # LightGBM Classification - only LightGBM classification parameters
         "lightgbm_classification": {
@@ -413,16 +554,6 @@ class Config:
         "sizey_regression": {
             "alpha": {"min": 0.01, "max": 0.5, "type": "float", "default": 0.1},
             "beta": {"min": 0.0, "max": 1.0, "type": "float", "default": 1.0},
-            "offset_strat": {
-                "choices": ["STD_ALL", "MED_UNDER", "MED_ALL", "STD_UNDER"],
-                "default": "STD_ALL",
-            },
-            "error_strat": {
-                "choices": [
-                    "DOUBLE"
-                ],  # feature not in use, only in reactive online learning
-                "default": "DOUBLE",
-            },
             "use_softmax": {"choices": [True, False], "default": True},
             "error_metric": {
                 "choices": ["smoothed_mape", "neg_mean_squared_error"],
@@ -480,14 +611,6 @@ class Config:
                 params.get("penalty") == "elasticnet" and params.get("solver") != "saga"
             ):
                 raise optuna.exceptions.TrialPruned()
-        elif family_name == "sizey_regression":
-            # Convert string enum values back to actual enum objects
-            if "offset_strat" in params:
-                offset_str = params["offset_strat"]
-                params["offset_strat"] = getattr(OffsetStrategy, offset_str)
-            if "error_strat" in params:
-                error_str = params["error_strat"]
-                params["error_strat"] = getattr(UnderPredictionStrategy, error_str)
         return params
 
     @staticmethod

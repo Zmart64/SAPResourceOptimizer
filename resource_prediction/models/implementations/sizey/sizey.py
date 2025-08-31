@@ -102,8 +102,8 @@ class Sizey:
         self.use_softmax = use_softmax
         self.error_metric = error_metric
 
-        self.max_memory_observed = max(y_train)[0]
-        self.min_memory_observed = min(y_train)[0]
+        self.max_memory_observed = np.max(y_train)
+        self.min_memory_observed = np.min(y_train)
 
         # Historical values
         self.x_full = x_train

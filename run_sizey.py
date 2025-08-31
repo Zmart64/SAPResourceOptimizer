@@ -37,15 +37,15 @@ def main():
 
         # Load training data
         with open(data_path / "X_train.pkl", "rb") as f:
-            x_train = pickle.load(f)
+            x_train = pickle.load(f)[:100]
         with open(data_path / "y_train.pkl", "rb") as f:
-            y_train = pickle.load(f)
+            y_train = pickle.load(f)[:100]
 
         # Load test data
         with open(data_path / "X_test.pkl", "rb") as f:
-            x_test = pickle.load(f)
+            x_test = pickle.load(f)[:100]
         with open(data_path / "y_test.pkl", "rb") as f:
-            y_test = pickle.load(f)
+            y_test = pickle.load(f)[:100]
 
         print(f"Full dataset: x_train={x_train.shape}, y_train={y_train.shape}")
 
@@ -67,14 +67,17 @@ def main():
         )
 
         predictions = sizey.predict(x_test_subset, y_test_subset)
+        # Convert predictions to numpy array for compatibility with reporting functions
+
+        # Ensure y_test_subset.values is 1D for compatibility with reporting functions
+        y_true_values = y_test_subset.values.flatten()
+
         # Use business evaluation functions from resource_prediction
         print("Evaluation Results:")
         print("-" * 60)
 
         # Calculate business metrics using the same functions as the main pipeline
-        business_metrics = Trainer._allocation_metrics(
-            predictions, y_test_subset.values
-        )
+        business_metrics = Trainer._allocation_metrics(predictions, y_true_values)
         business_score = Trainer._business_score(business_metrics)
 
         print(f"Under-allocation Rate: {business_metrics['under_pct']:.2f}%")
@@ -86,7 +89,7 @@ def main():
         allocation_stats = calculate_allocation_categories(
             name="SizeyPredictor",
             allocations=predictions,
-            true_values=y_test_subset.values,
+            true_values=y_true_values,
         )
 
         print("\n Detailed Business Allocation Analysis:")

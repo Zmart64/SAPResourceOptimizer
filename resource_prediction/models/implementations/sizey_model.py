@@ -27,7 +27,7 @@ class SizeyPredictor(BasePredictor):
         self,
         alpha: float = 0.1,
         beta: float = 1.0,
-        offset_strat: OffsetStrategy = OffsetStrategy.DYNAMIC,
+        offset_strat: OffsetStrategy = OffsetStrategy.STD_ALL,
         error_strat: UnderPredictionStrategy = UnderPredictionStrategy.MAX_EVER_OBSERVED,
         use_softmax: bool = True,
         error_metric: str = "smoothed_mape",
@@ -93,7 +93,7 @@ class SizeyPredictor(BasePredictor):
 
         self.is_fitted = True
 
-    def predict(self, X: pd.DataFrame, y: pd.Series):
+    def predict(self, X: pd.DataFrame, y: pd.Series) -> np.ndarray:
         """
         Make prediction using the Sizey model.
         IMPORTANT: After each prediction the model expects error calculation
@@ -111,6 +111,8 @@ class SizeyPredictor(BasePredictor):
         x_encoded = self._encode(X, fit=False)
         x_array = x_encoded.to_numpy()
 
+        predictions = []
+
         for i in range(len(y)):
             y_instance = y.iloc[i]
             x_test_instance = x_array[i].reshape(1, -1)
@@ -119,10 +121,12 @@ class SizeyPredictor(BasePredictor):
             scaled_prediction, _ = self.sizey_model.predict(x_test=x_test_instance)
             self.sizey_model.calculate_error(y_instance)
 
-        if isinstance(scaled_prediction, np.ndarray):
-            scaled_prediction = scaled_prediction.flatten()[0]
+            # if isinstance(scaled_prediction, np.ndarray):
+            #     scaled_prediction = scaled_prediction.flatten()[0]
 
-        return scaled_prediction
+            predictions.append(scaled_prediction)
+
+        return np.array(predictions)
 
         # ATTENTION
         # Normally sizey does online learning, meaning:
